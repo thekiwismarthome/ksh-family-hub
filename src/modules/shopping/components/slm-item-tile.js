@@ -1,0 +1,655 @@
+import { LitElement, html, css } from 'lit';
+import { fontInherit } from '../styles/ui-styles.js';
+import { PRODUCT_ICON_MAP } from '../icons/product-icon-map.js';
+import { PRODUCT_ICONS } from '../icons/product-icons.js';
+
+const LOCAL_IMG_EXTS = ['webp', 'jpg', 'png', 'jpeg'];
+const LOCAL_IMG_CACHE_KEY = 'slm_local_img_cache';
+const LOCAL_IMG_TTL_MS = 24 * 60 * 60 * 1000;
+
+// base path -> index of extension that loaded, or -1 if none exist. Avoids
+// re-probing (and 404ing) up to 4 URLs per tile on every render/reload.
+let _localImgCacheStamp = Date.now();
+const _localImgCache = (() => {
+  try {
+    const raw = JSON.parse(localStorage.getItem(LOCAL_IMG_CACHE_KEY) || 'null');
+    if (raw && Date.now() - raw.t < LOCAL_IMG_TTL_MS) {
+      _localImgCacheStamp = raw.t;
+      return new Map(Object.entries(raw.m));
+    }
+  } catch (e) { /* ignore */ }
+  return new Map();
+})();
+let _localImgSaveTimer = null;
+
+function _rememberLocalImg(base, idx) {
+  if (_localImgCache.get(base) === idx) return;
+  _localImgCache.set(base, idx);
+  clearTimeout(_localImgSaveTimer);
+  _localImgSaveTimer = setTimeout(() => {
+    try {
+      localStorage.setItem(LOCAL_IMG_CACHE_KEY, JSON.stringify({
+        t: _localImgCacheStamp,
+        m: Object.fromEntries(_localImgCache),
+      }));
+    } catch (e) { /* ignore */ }
+  }, 500);
+}
+
+class SLMItemTile extends LitElement {
+  static properties = {
+    item: { type: Object },
+    categoryColor: { type: String },
+    isRecentlyUsed: { type: Boolean },
+    settings: { type: Object },
+    // 'classic' | 'fresh' | 'compact' (see Appearance settings)
+    uiStyle: { type: String, attribute: 'ui-style', reflect: true },
+    touchStartX: { type: Number },
+    touchStartY: { type: Number },
+    touchStartTime: { type: Number },
+    longPressTimer: { type: Number },
+    longPressTriggered: { type: Boolean },
+  };
+
+  constructor() {
+    super();
+    this.uiStyle = 'classic';
+    this.isRecentlyUsed = false;
+    this.touchStartX = 0;
+    this.touchStartY = 0;
+    this.touchStartTime = 0;
+    this.longPressTimer = null;
+    this.longPressTriggered = false;
+    this._localImgExtIdx = 0;
+    this._localImgItemId = null;
+  }
+
+  updated(changedProps) {
+    if (changedProps.has('item') && this.item?.id !== this._localImgItemId) {
+      this._localImgItemId = this.item?.id;
+      this._localImgExtIdx = 0;
+    }
+  }
+
+  hexToRgb(hex) {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result
+      ? { r: parseInt(result[1], 16), g: parseInt(result[2], 16), b: parseInt(result[3], 16) }
+      : { r: 159, g: 168, b: 218 };
+  }
+
+  handleTileClick(e) {
+    if (this.longPressTriggered) {
+      this.longPressTriggered = false;
+      return;
+    }
+    if (e.target.closest('.decrease-btn')) {
+      return;
+    }
+    // For regular tiles, quantity-badge click is handled separately (increment)
+    // For recently-used tiles, the badge IS the + button, so let it fall through
+    if (!this.isRecentlyUsed && e.target.closest('.quantity-badge')) {
+      return;
+    }
+    if (this.isRecentlyUsed) {
+      // Recently-used tiles hold Products, not list Items — dispatch add-item
+      this.dispatchEvent(new CustomEvent('add-item', {
+        detail: {
+          name: this.item.name,
+          category_id: this.item.category_id,
+          product_id: this.item.id,
+          quantity: 1,
+          unit: this.item.default_unit || 'units',
+          price: this.item.price || null,
+          image_url: this.item.image_url || null,
+          fromRecentlyUsed: true
+        },
+        bubbles: true,
+        composed: true
+      }));
+      return;
+    }
+    this.dispatchEvent(new CustomEvent('item-check', {
+      detail: { itemId: this.item.id, checked: !this.item.checked },
+      bubbles: true,
+      composed: true
+    }));
+  }
+
+  handleDecrease(e) {
+    e.stopPropagation();
+    this.dispatchEvent(new CustomEvent('item-decrease', {
+      detail: { itemId: this.item.id },
+      bubbles: true,
+      composed: true
+    }));
+  }
+
+  handleQuantityClick(e) {
+    e.stopPropagation();
+    this.dispatchEvent(new CustomEvent('item-click', {
+      detail: { itemId: this.item.id },
+      bubbles: true,
+      composed: true
+    }));
+  }
+
+  handleContextMenu(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    return false;
+  }
+
+  handleTouchStart(e) {
+    this.touchStartX = e.touches[0].clientX;
+    this.touchStartY = e.touches[0].clientY;
+    this.touchStartTime = Date.now();
+    this.longPressTriggered = false;
+
+    this.longPressTimer = setTimeout(() => {
+      this.longPressTriggered = true;
+      this.dispatchEvent(new CustomEvent('item-long-press', {
+        detail: { item: this._longPressItem() },
+        bubbles: true,
+        composed: true
+      }));
+    }, 500);
+  }
+
+  handleTouchMove(e) {
+    if (this.longPressTimer) {
+      const touchX = e.touches[0].clientX;
+      const touchY = e.touches[0].clientY;
+      const deltaX = Math.abs(touchX - this.touchStartX);
+      const deltaY = Math.abs(touchY - this.touchStartY);
+      if (deltaX > 10 || deltaY > 10) {
+        clearTimeout(this.longPressTimer);
+        this.longPressTimer = null;
+      }
+    }
+  }
+
+  handleTouchEnd(e) {
+    if (this.longPressTimer) {
+      clearTimeout(this.longPressTimer);
+      this.longPressTimer = null;
+    }
+  }
+
+  handleMouseDown(e) {
+    if (e.button === 2) {
+      e.preventDefault();
+      return false;
+    }
+    this.longPressTriggered = false;
+    this.longPressTimer = setTimeout(() => {
+      this.longPressTriggered = true;
+      this.dispatchEvent(new CustomEvent('item-long-press', {
+        detail: { item: this._longPressItem() },
+        bubbles: true,
+        composed: true
+      }));
+    }, 500);
+  }
+
+  _longPressItem() {
+    if (!this.isRecentlyUsed) return this.item;
+    // Recently-used tiles hold Products — return an item-shaped object so the
+    // edit dialog renders correctly, with _isProductEdit to skip api.updateItem
+    return {
+      id: null,
+      product_id: this.item.id,
+      name: this.item.name,
+      category_id: this.item.category_id,
+      unit: this.item.default_unit || 'units',
+      quantity: this.item.default_quantity || 1,
+      price: this.item.price || '',
+      image_url: this.item.image_url || '',
+      note: '',
+      _isProductEdit: true
+    };
+  }
+
+  handleMouseUp(e) {
+    if (this.longPressTimer) {
+      clearTimeout(this.longPressTimer);
+      this.longPressTimer = null;
+    }
+  }
+
+  handleMouseLeave(e) {
+    if (this.longPressTimer) {
+      clearTimeout(this.longPressTimer);
+      this.longPressTimer = null;
+    }
+  }
+
+  firstUpdated() {
+    const tile = this.shadowRoot.querySelector('.tile');
+    if (tile) {
+      tile.addEventListener('touchstart', this.handleTouchStart.bind(this), { passive: true });
+      tile.addEventListener('touchmove', this.handleTouchMove.bind(this), { passive: true });
+      tile.addEventListener('touchend', this.handleTouchEnd.bind(this), { passive: true });
+      tile.addEventListener('contextmenu', this.handleContextMenu.bind(this));
+    }
+  }
+
+  _noteType(note) {
+    if (!note) return null;
+    return note.startsWith('[RM] ') ? 'recipe' : 'note';
+  }
+
+  getCategoryEmoji(categoryId) {
+    const emojiMap = {
+      'produce': '🥬', 'dairy': '🥛', 'meat': '🥩', 'bakery': '🍞',
+      'pantry': '🥫', 'frozen': '🧊', 'beverages': '🥤', 'snacks': '🍿',
+      'household': '🧹', 'health': '💊', 'pet': '🐾', 'baby': '👶', 'other': '📦'
+    };
+    return emojiMap[categoryId] || '📦';
+  }
+
+  getProductEmoji(name, categoryId) {
+    if (!name) return this.getCategoryEmoji(categoryId);
+    const lower = name.toLowerCase();
+    const productMap = {
+      'chicken': '🍗', 'turkey': '🦃', 'duck': '🦆',
+      'beef': '🥩', 'steak': '🥩', 'mince': '🥩', 'lamb': '🍖',
+      'pork': '🥓', 'bacon': '🥓', 'ham': '🍖', 'sausage': '🌭', 'salami': '🍖',
+      'fish': '🐟', 'salmon': '🐟', 'tuna': '🐟', 'prawn': '🦐', 'shrimp': '🦐',
+      'egg': '🥚', 'eggs': '🥚',
+      'milk': '🥛', 'cream': '🥛', 'yogurt': '🫙', 'yoghurt': '🫙',
+      'cheese': '🧀', 'cheddar': '🧀', 'feta': '🧀', 'mozzarella': '🧀',
+      'butter': '🧈',
+      'bread': '🍞', 'toast': '🍞', 'bun': '🥖', 'roll': '🥖', 'bagel': '🥯',
+      'loaf': '🍞', 'sourdough': '🍞', 'wrap': '🫓', 'croissant': '🥐',
+      'apple': '🍎', 'orange': '🍊', 'banana': '🍌', 'grape': '🍇',
+      'strawberry': '🍓', 'blueberry': '🫐', 'raspberry': '🍓',
+      'lemon': '🍋', 'lime': '🍋', 'pineapple': '🍍', 'mango': '🥭',
+      'watermelon': '🍉', 'melon': '🍈', 'peach': '🍑', 'pear': '🍐',
+      'cherry': '🍒', 'kiwi': '🥝', 'avocado': '🥑',
+      'tomato': '🍅', 'potato': '🥔', 'carrot': '🥕', 'broccoli': '🥦',
+      'lettuce': '🥬', 'spinach': '🥬', 'salad': '🥗', 'kale': '🥬',
+      'onion': '🧅', 'garlic': '🧄', 'corn': '🌽', 'pepper': '🫑',
+      'cucumber': '🥒', 'mushroom': '🍄', 'eggplant': '🍆',
+      'peas': '🫛', 'beans': '🫘', 'lentil': '🫘',
+      'coffee': '☕', 'espresso': '☕', 'latte': '☕',
+      'tea': '🍵', 'juice': '🧃',
+      'water': '💧', 'sparkling': '💧',
+      'beer': '🍺', 'wine': '🍷', 'cider': '🍺', 'spirits': '🥃', 'whisky': '🥃',
+      'soda': '🥤', 'cola': '🥤',
+      'pasta': '🍝', 'noodle': '🍜', 'rice': '🍚', 'oat': '🌾', 'cereal': '🥣',
+      'flour': '🌾', 'sugar': '🍬', 'salt': '🧂', 'oil': '🫙', 'vinegar': '🫙',
+      'sauce': '🫙', 'ketchup': '🫙', 'mustard': '🫙', 'mayonnaise': '🫙',
+      'honey': '🍯', 'jam': '🫙', 'peanut butter': '🥜',
+      'chocolate': '🍫', 'chips': '🥔', 'popcorn': '🍿', 'biscuit': '🍪',
+      'cookie': '🍪', 'cake': '🎂', 'muffin': '🧁', 'doughnut': '🍩',
+      'ice cream': '🍦',
+      'shampoo': '🧴', 'conditioner': '🧴', 'soap': '🧼', 'toothpaste': '🦷',
+      'toilet paper': '🧻', 'tissues': '🧻',
+      'nappy': '👶', 'diaper': '👶', 'formula': '👶',
+      'pet food': '🐾', 'dog food': '🐕', 'cat food': '🐈',
+    };
+    for (const [key, emoji] of Object.entries(productMap)) {
+      if (lower.includes(key)) return emoji;
+    }
+    return this.getCategoryEmoji(categoryId);
+  }
+
+  getBundledIcon(name) {
+    if (!name) return null;
+    const lower = name.toLowerCase();
+    for (const [keyword, slug] of Object.entries(PRODUCT_ICON_MAP)) {
+      if (lower.includes(keyword) && PRODUCT_ICONS[slug]) {
+        return PRODUCT_ICONS[slug];
+      }
+    }
+    return null;
+  }
+
+  getLocalImageBasePath(name) {
+    const basePath = this.settings?.localImagePath;
+    if (!basePath || !name) return null;
+    // Use hyphens, keep apostrophes — e.g. "Arnott's Shapes" → "arnott's-shapes"
+    const slug = name.toLowerCase()
+      .replace(/[^a-z0-9']+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '');
+    return `${basePath.replace(/\/$/, '')}/${slug}`;
+  }
+
+  renderImage() {
+    const name = this.item?.name;
+    const categoryId = this.item?.category_id;
+    const exts = LOCAL_IMG_EXTS;
+    this._isPhoto = false; // true when a real picture (not a small icon or emoji) is shown
+
+    // 1. Explicit product image URL (highest priority)
+    if (this.item?.image_url) {
+      this._isPhoto = true;
+      return html`
+        <div class="image-area photo">
+          <img src="${this.item.image_url}" alt="${name}" class="product-icon">
+        </div>`;
+    }
+
+    // 2. Local HA image folder — try webp → jpg → png → jpeg (result cached)
+    const localBase = this.getLocalImageBasePath(name);
+    if (localBase) {
+      const cached = _localImgCache.get(localBase);
+      const idx = cached === undefined ? this._localImgExtIdx : (cached < 0 ? exts.length : cached);
+      if (idx < exts.length) {
+        this._isPhoto = true;
+        return html`
+          <div class="image-area photo">
+            <img
+              src="${localBase}.${exts[idx]}"
+              alt="${name}"
+              class="product-icon"
+              @load=${() => _rememberLocalImg(localBase, idx)}
+              @error=${() => {
+                const next = idx + 1;
+                if (next >= exts.length) _rememberLocalImg(localBase, -1);
+                else _localImgCache.delete(localBase);
+                this._localImgExtIdx = next;
+                this.requestUpdate();
+              }}
+            >
+          </div>`;
+      }
+    }
+
+    // 3. Bundled icons8 icon
+    const bundled = this.getBundledIcon(name);
+    if (bundled) {
+      return html`
+        <div class="image-area">
+          <img src="${bundled}" alt="${name}" class="product-icon">
+        </div>`;
+    }
+
+    // 4. Emoji fallback
+    return html`
+      <div class="image-area">
+        <div class="emoji">${this.getProductEmoji(name, categoryId)}</div>
+      </div>`;
+  }
+
+  render() {
+    const { r, g, b } = this.hexToRgb(this.categoryColor);
+    let tileBg = this.isRecentlyUsed
+      ? `rgba(${r},${g},${b},0.12)`
+      : `rgba(${r},${g},${b},0.25)`;
+    if (this.uiStyle === 'fresh') {
+      tileBg = `color-mix(in srgb, ${this.categoryColor} ${this.isRecentlyUsed ? 8 : 14}%, var(--slm-bg-surface))`;
+    } else if (this.uiStyle === 'compact') {
+      tileBg = 'var(--slm-bg-surface)';
+    }
+    const showPrice = this.settings?.showPriceOnTile !== false;
+    const image = this.renderImage();
+    const hasPhoto = this._isPhoto;
+
+    return html`
+      <div
+        class="tile ${this.item.checked ? 'checked' : ''} ${this.isRecentlyUsed ? 'recently-used' : ''} ${this.item._pending ? 'pending' : ''} ${hasPhoto ? 'has-photo' : ''}"
+        style="background: ${tileBg}"
+        @click=${this.handleTileClick}
+        @mousedown=${this.handleMouseDown}
+        @mouseup=${this.handleMouseUp}
+        @mouseleave=${this.handleMouseLeave}
+      >
+        ${this.isRecentlyUsed ? html`
+          <div class="quantity-badge" style="background: ${this.categoryColor}">+</div>
+        ` : html`
+          ${!this.item.checked ? html`
+            <button class="decrease-btn" style="background: rgba(${r},${g},${b},0.7)" @click=${this.handleDecrease}>
+              <span>−</span>
+            </button>
+          ` : ''}
+          ${!this.item.checked ? html`
+            <div
+              class="quantity-badge"
+              style="background: ${this.categoryColor}"
+              @click=${this.handleQuantityClick}
+            >
+              ${this.item.quantity}
+            </div>
+          ` : ''}
+        `}
+
+        ${image}
+
+        <div class="info">
+          <div class="name">${this.item.name}</div>
+          ${showPrice && this.item.price ? html`
+            <div class="price">$${(this.item.price * (this.item.quantity || 1)).toFixed(2)}</div>
+          ` : ''}
+        </div>
+
+        ${this._noteType(this.item.note) === 'recipe' ? html`
+          <div class="note-badge recipe-note" title="${this.item.note?.replace('[RM] ', '') ?? ''}">
+            <ha-icon icon="mdi:chef-hat"></ha-icon>
+          </div>
+        ` : this._noteType(this.item.note) === 'note' ? html`
+          <div class="note-badge info-note" title="${this.item.note ?? ''}">
+            <ha-icon icon="mdi:information-variant-circle-outline"></ha-icon>
+          </div>
+        ` : ''}
+
+        ${this.item.checked ? html`
+          <div class="checked-overlay">
+            <span class="check-icon">✓</span>
+          </div>
+        ` : ''}
+      </div>
+    `;
+  }
+
+  static styles = [css`
+    :host {
+      font-size: var(--slm-font-size-base, 16px);
+      font-weight: var(--slm-font-weight-base, 400);
+    }
+    .tile {
+      position: relative;
+      border-radius: 14px;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      cursor: pointer;
+      transition: all 0.15s;
+      user-select: none;
+      aspect-ratio: 1;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+      container-type: inline-size;
+    }
+    .tile:active {
+      transform: scale(0.97);
+    }
+    .tile.recently-used {
+      opacity: 0.8;
+    }
+    .tile.pending {
+      opacity: 0.6;
+      pointer-events: none;
+    }
+    .tile.checked {
+      opacity: var(--slm-tile-checked-opacity);
+    }
+    .decrease-btn,
+    .quantity-badge {
+      position: absolute;
+      top: 0;
+      width: 44px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      box-sizing: border-box;
+      color: var(--slm-on-cat, white);
+      border: none;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      z-index: 2;
+    }
+    .decrease-btn {
+      left: 0;
+      border-radius: 14px 0 14px 0;
+      box-shadow: 2px 2px 6px rgba(0,0,0,0.25);
+    }
+    .quantity-badge {
+      right: 0;
+      border-radius: 0 14px 0 14px;
+      box-shadow: -2px 2px 6px rgba(0,0,0,0.25);
+    }
+    .image-area {
+      flex: 1;
+      min-height: 0;
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    /* Small drawn icons sit above the name. Whichever side is longer reaches the edge and the other
+       side keeps its proportion, so nothing is cropped or stretched. */
+    .product-icon {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+    /* A real picture (a product photo, or one from your own folder) fills the whole tile, edge to
+       edge, behind the name. Tiles are square, so a normal square photo is not cropped at all. */
+    .image-area.photo {
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+    }
+    .image-area.photo .product-icon {
+      object-fit: cover;
+    }
+    .tile.has-photo .info {
+      position: relative;
+      z-index: 1;
+      margin-top: auto;
+      padding-top: 22px;
+      background: linear-gradient(to bottom, transparent, rgba(0, 0, 0, 0.72));
+    }
+    .tile.has-photo .name,
+    .tile.has-photo .price {
+      color: #fff;
+      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+    }
+    .emoji {
+      font-size: clamp(20px, 40cqi, 60px);
+      line-height: 1;
+    }
+    .info {
+      flex-shrink: 0;
+      padding: 5px 8px 7px;
+      text-align: center;
+    }
+    .name {
+      font-weight: var(--slm-font-weight-base, 600);
+      font-size: 0.75em;
+      line-height: 1.2;
+      margin-bottom: 2px;
+      color: var(--slm-text-primary, #e0e0e0);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      text-align: center;
+    }
+    .price {
+      font-size: 0.69em;
+      color: var(--slm-accent-primary, #9fa8da);
+      font-weight: 700;
+      text-align: center;
+    }
+    .checked-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: color-mix(in srgb, var(--slm-accent-primary, #9fa8da) 88%, transparent);
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .check-icon {
+      font-size: 40px;
+      color: white;
+    }
+    .note-badge {
+      position: absolute;
+      bottom: 8px;
+      right: 6px;
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 3;
+      background: rgba(0,0,0,0.5);
+      box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+    }
+    /* ---------- Fresh + Compact: softer tiles, pill badges ---------- */
+    :host([ui-style="fresh"]) .tile,
+    :host([ui-style="compact"]) .tile {
+      border: 1px solid var(--slm-border-subtle);
+      box-shadow: none;
+      box-sizing: border-box;
+    }
+    :host([ui-style="fresh"]) .tile {
+      border-radius: 18px;
+    }
+    :host([ui-style="compact"]) .tile {
+      border-radius: 14px;
+    }
+    :host([ui-style="fresh"]) .checked-overlay {
+      border-radius: 17px;
+    }
+    :host([ui-style="compact"]) .checked-overlay {
+      border-radius: 13px;
+    }
+    :host([ui-style="fresh"]) .decrease-btn,
+    :host([ui-style="fresh"]) .quantity-badge,
+    :host([ui-style="compact"]) .decrease-btn,
+    :host([ui-style="compact"]) .quantity-badge {
+      top: 6px;
+      height: 26px;
+      box-shadow: none;
+    }
+    :host([ui-style="fresh"]) .decrease-btn,
+    :host([ui-style="compact"]) .decrease-btn {
+      left: 6px;
+      width: 26px;
+      border-radius: 50%;
+    }
+    :host([ui-style="fresh"]) .quantity-badge,
+    :host([ui-style="compact"]) .quantity-badge {
+      right: 6px;
+      width: auto;
+      min-width: 26px;
+      padding: 0 8px;
+      border-radius: 999px;
+    }
+    :host([ui-style="fresh"]) .name,
+    :host([ui-style="compact"]) .name {
+      font-weight: 600;
+    }
+    .note-badge ha-icon { --mdc-icon-size: 17px; }
+    .recipe-note { color: #9fa8da; }
+    .info-note { color: #b0b0b0; }
+  `, fontInherit];
+}
+
+customElements.define('ksh-slm-item-tile', SLMItemTile);

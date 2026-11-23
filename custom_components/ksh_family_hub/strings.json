@@ -1,0 +1,39 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "KSH Family Hub",
+        "description": "Choose which parts of the hub to switch on. You can change this later from the card's Settings or the Configure button.",
+        "data": {
+          "enable_recipes": "Recipes & Meal Planner",
+          "enable_shopping": "Shopping Lists",
+          "country": "Country (shopping catalogue)"
+        }
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Only a single instance of KSH Family Hub is allowed."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "KSH Family Hub Options",
+        "data": {
+          "enable_recipes": "Recipes & Meal Planner",
+          "enable_shopping": "Shopping Lists",
+          "country": "Country (shopping catalogue)",
+          "enable_price_tracking": "Enable price tracking",
+          "enable_image_search": "Enable image search",
+          "metric_units_only": "Metric units only",
+          "show_panel": "Show in the sidebar"
+        },
+        "data_description": {
+          "enable_recipes": "Recipes, meal planner and cooking timers.",
+          "enable_shopping": "Shopping lists, product catalogue, loyalty cards and supermarkets.",
+          "show_panel": "Adds a full-screen Family Hub entry to the Home Assistant sidebar."
+        }
+      }
+    }
+  }
+}

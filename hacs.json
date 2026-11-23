@@ -1,0 +1,7 @@
+{
+  "name": "KSH Family Hub",
+  "content_in_root": false,
+  "render_readme": true,
+  "domains": ["ksh_family_hub"],
+  "homeassistant": "2024.8.0"
+}

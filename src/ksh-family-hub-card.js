@@ -1,0 +1,488 @@
+import { LitElement, html, css, nothing } from 'lit';
+import { keyed } from 'lit/directives/keyed.js';
+import { CARD_VERSION } from 'virtual:card-version';
+import { ITEMS, SUB_TABS, visibleItems, itemById } from './hub/modules.js';
+import { hubTokens } from './hub/hub-styles.js';
+import './hub/ksh-hub-home.js';
+import './hub/ksh-hub-settings.js';
+import './hub/ksh-hub-placeholder.js';
+import './modules/recipes/recipe-manager-card.js';    // <ksh-recipes-module>
+import './modules/shopping/shopping-list-manager-card.js'; // <ksh-shopping-module>
+
+const ROUTE_KEY = 'ksh_hub_route';
+const THEME_KEY = 'ksh_hub_theme';
+const RAIL_MIN_WIDTH = 700;
+
+// Menu entries backed by a real module element
+const MODULE_ELEMENT = { shopping: 'ksh-shopping-module', meals: 'ksh-recipes-module' };
+const MODULE_DEFAULT_VIEW = { shopping: 'shopping', meals: 'grid' };
+// Sub views that take over the whole module (the module's own header has a back button)
+const HIDE_TABS_IN = { meals: ['detail', 'add'] };
+
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch { /* private mode */ } },
+};
+
+export class KshFamilyHubCard extends LitElement {
+  static properties = {
+    hass: { type: Object },
+    narrow: { type: Boolean },          // set by the HA panel; unused, width is measured instead
+    _config: { state: true },
+    _info: { state: true },
+    _error: { state: true },
+    _route: { state: true },
+    _rail: { state: true },
+    _moreOpen: { state: true },
+    _theme: { state: true },
+    _subView: { state: true },
+    _gen: { state: true },
+  };
+
+  constructor() {
+    super();
+    this._config = {};
+    this._info = null;
+    this._error = null;
+    this._route = store.get(ROUTE_KEY) || 'home';
+    this._rail = false;
+    this._moreOpen = false;
+    this._theme = store.get(THEME_KEY) || 'dark';
+    this._subView = {};
+    this._gen = 0;
+    this._visited = new Set(['home', 'settings'].includes(this._route) ? [] : [this._route]);
+    this._infoRequested = false;
+    this._isPanel = false;
+  }
+
+  setConfig(config) { this._config = config || {}; }
+  getCardSize() { return 10; }
+  static getStubConfig() { return {}; }
+
+  connectedCallback() {
+    super.connectedCallback();
+    this._ro = new ResizeObserver(entries => {
+      const w = entries[0]?.contentRect?.width ?? 0;
+      if (w) this._rail = w >= RAIL_MIN_WIDTH;
+    });
+    this._ro.observe(this);
+    this._onKey = e => { if (e.key === 'Escape' && this._moreOpen) this._moreOpen = false; };
+    window.addEventListener('keydown', this._onKey);
+    this._onResize = () => this._updateHeight();
+    window.addEventListener('resize', this._onResize);
+    window.visualViewport?.addEventListener('resize', this._onResize);
+    // A panel is sized by Home Assistant; as a dashboard card we fill the viewport ourselves
+    this._isPanel = this.localName === 'ksh-family-hub-panel';
+    this._updateHeight();
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    this._ro?.disconnect();
+    window.removeEventListener('keydown', this._onKey);
+    window.removeEventListener('resize', this._onResize);
+    window.visualViewport?.removeEventListener('resize', this._onResize);
+  }
+
+  _updateHeight() {
+    if (this._isPanel) return;
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const top = this.getBoundingClientRect().top;
+      const available = window.innerHeight - Math.max(top, 0);
+      if (available > 200) this.style.height = `${available}px`;
+    }));
+  }
+
+  willUpdate(changed) {
+    if (changed.has('hass') && this.hass && !this._infoRequested) {
+      this._infoRequested = true;
+      this._loadInfo();
+    }
+  }
+
+  updated(changed) {
+    if (changed.has('_theme') || changed.has('hass')) this._applyMode();
+  }
+
+  // ---- data ---------------------------------------------------------------
+
+  async _loadInfo() {
+    try {
+      this._info = await this.hass.callWS({ type: 'ksh_family_hub/get_info' });
+      this._error = null;
+      // A route may point at a module that has since been switched off
+      if (!this._available(this._route)) this._setRoute('home');
+    } catch (err) {
+      this._error = err?.message || 'unknown_error';
+    }
+  }
+
+  async _setModules(patch) {
+    await this.hass.callWS({ type: 'ksh_family_hub/set_modules', ...patch });
+    // The integration reloads itself; wait for it to come back with the new flags
+    const want = patch;
+    for (let i = 0; i < 20; i++) {
+      await new Promise(r => setTimeout(r, 1000));
+      try {
+        const info = await this.hass.callWS({ type: 'ksh_family_hub/get_info' });
+        const ok = Object.entries(want).every(([k, v]) => !!info.modules?.[k] === v);
+        if (ok) {
+          this._info = info;
+          this._gen += 1;               // rebuild module elements against the new backend
+          this._visited = new Set();
+          if (!this._available(this._route)) this._setRoute('home');
+          return;
+        }
+      } catch { /* integration still reloading */ }
+    }
+    await this._loadInfo();
+  }
+
+  // ---- routing ------------------------------------------------------------
+
+  _available(id) {
+    const item = itemById(id);
+    if (!item) return false;
+    return !item.module || !!this._info?.modules?.[item.module];
+  }
+
+  _setRoute(id) {
+    if (id === 'settings') { this._route = 'settings'; this._moreOpen = false; return; }
+    this._route = id;
+    this._moreOpen = false;
+    if (id !== 'home') this._visited.add(id);
+    store.set(ROUTE_KEY, id);
+  }
+
+  _onNavigate(e) { this._setRoute(e.detail.id); }
+
+  _setTheme(theme) { this._theme = theme; store.set(THEME_KEY, theme); }
+
+  get _dark() {
+    if (this._theme === 'light') return false;
+    if (this._theme === 'dark') return true;
+    const ha = this.hass?.themes?.darkMode;
+    return typeof ha === 'boolean' ? ha : window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? true;
+  }
+
+  _applyMode() { this.setAttribute('data-mode', this._dark ? 'dark' : 'light'); }
+
+  _tabSelect(view) {
+    const el = this.renderRoot.querySelector(`#mod-${this._route}`);
+    this._subView = { ...this._subView, [this._route]: view };
+    if (!el) return;
+    if (this._route === 'shopping') el.currentView = view;
+    else if (this._route === 'meals') el.setHubView(view);
+  }
+
+  _onModuleView(id, e) {
+    this._subView = { ...this._subView, [id]: e.detail.view };
+  }
+
+  // ---- render -------------------------------------------------------------
+
+  render() {
+    if (this._error) return this._renderError();
+    if (!this._info) return html`<div class="center"><div class="spinner"></div></div>`;
+
+    const items = visibleItems(this._info.modules);
+    return html`
+      <div class="shell ${this._rail ? 'rail-layout' : 'bar-layout'}">
+        ${this._rail ? this._renderRail(items) : nothing}
+        <main class="stage">
+          ${this._renderStage()}
+        </main>
+        ${!this._rail ? this._renderBar(items) : nothing}
+      </div>
+      ${this._moreOpen ? this._renderMore(items) : nothing}
+    `;
+  }
+
+  _renderError() {
+    return html`
+      <div class="center">
+        <div class="error-card">
+          <ha-icon icon="mdi:alert-circle-outline"></ha-icon>
+          <h3>KSH Family Hub isn't ready</h3>
+          <p>The integration did not answer. Check that <b>KSH Family Hub</b> is added under
+             Settings → Devices &amp; services, then refresh this page.</p>
+          <code>${this._error}</code>
+          <button class="btn" @click=${() => { this._infoRequested = false; this._error = null; this.requestUpdate(); }}>Retry</button>
+        </div>
+      </div>
+    `;
+  }
+
+  _renderStage() {
+    const route = this._route;
+    const mod = MODULE_ELEMENT[route];
+    const tabs = SUB_TABS[route];
+    const sub = this._subView[route] || MODULE_DEFAULT_VIEW[route];
+    const showTabs = tabs && !(HIDE_TABS_IN[route] || []).includes(sub);
+    const dark = this._dark;
+    const ui = 'compact';
+
+    return html`
+      ${route === 'home' ? html`
+        <ksh-hub-home .hass=${this.hass} .modules=${this._info.modules} .dark=${dark} .panel=${this._isPanel}
+          @hub-navigate=${this._onNavigate}
+          @hub-open-settings=${() => this._setRoute('settings')}></ksh-hub-home>` : nothing}
+
+      ${route === 'settings' ? html`
+        <ksh-hub-settings .hass=${this.hass} .info=${this._info} .theme=${this._theme}
+          .cardVersion=${CARD_VERSION}
+          @hub-theme=${e => this._setTheme(e.detail.theme)}
+          @hub-modules=${e => this._setModules(e.detail)}
+          @hub-back=${() => this._setRoute('home')}></ksh-hub-settings>` : nothing}
+
+      ${!mod && route !== 'home' && route !== 'settings' ? html`
+        <ksh-hub-placeholder .item=${itemById(route)}
+          @hub-navigate=${this._onNavigate}></ksh-hub-placeholder>` : nothing}
+
+      ${showTabs ? html`
+        <nav class="subtabs" aria-label="Sections">
+          ${tabs.map(t => html`
+            <button class="subtab ${sub === t.view ? 'active' : ''}" @click=${() => this._tabSelect(t.view)}>
+              <ha-icon icon=${t.icon}></ha-icon><span>${t.label}</span>
+            </button>`)}
+        </nav>` : nothing}
+
+      ${keyed(this._gen, html`
+        ${this._visited.has('shopping') && this._info.modules.shopping ? html`
+          <div class="module" ?hidden=${route !== 'shopping'}>
+            <ksh-shopping-module id="mod-shopping" hub-mode
+              .hass=${this.hass} .hostUi=${ui} .hostDark=${dark}
+              @module-view-changed=${e => this._onModuleView('shopping', e)}></ksh-shopping-module>
+          </div>` : nothing}
+        ${this._visited.has('meals') && this._info.modules.recipes ? html`
+          <div class="module" ?hidden=${route !== 'meals'}>
+            <ksh-recipes-module id="mod-meals" hub-mode
+              .hass=${this.hass} .hostUi=${ui} .hostDark=${dark}
+              @module-view-changed=${e => this._onModuleView('meals', e)}></ksh-recipes-module>
+          </div>` : nothing}
+      `)}
+    `;
+  }
+
+  _tile(item, { active = false, size = '' } = {}) {
+    return html`
+      <span class="tile ${active ? 'active' : ''} ${size}" style="--c:${item.color}">
+        <ha-icon icon=${item.icon}></ha-icon>
+        ${item.locked ? html`<span class="lock"><ha-icon icon="mdi:lock-outline"></ha-icon></span>` : nothing}
+      </span>`;
+  }
+
+  _renderBar(items) {
+    const primary = items.filter(i => i.primary);
+    const moreActive = !primary.some(i => i.id === this._route) && this._route !== 'settings';
+    return html`
+      <nav class="bar" aria-label="Main">
+        ${primary.map(i => html`
+          <button class="bar-item ${this._route === i.id ? 'active' : ''}" @click=${() => this._setRoute(i.id)}
+            aria-current=${this._route === i.id ? 'page' : 'false'}>
+            ${this._tile(i, { active: this._route === i.id })}
+            <span class="label">${i.label}</span>
+          </button>`)}
+        <button class="bar-item ${moreActive || this._moreOpen ? 'active' : ''}" @click=${() => { this._moreOpen = !this._moreOpen; }}
+          aria-haspopup="dialog" aria-expanded=${this._moreOpen ? 'true' : 'false'}>
+          <span class="tile more ${moreActive ? 'active' : ''}"><ha-icon icon="mdi:dots-grid"></ha-icon></span>
+          <span class="label">More</span>
+        </button>
+      </nav>`;
+  }
+
+  _renderRail(items) {
+    return html`
+      <nav class="rail" aria-label="Main">
+        ${items.map(i => html`
+          <button class="rail-item ${this._route === i.id ? 'active' : ''}" title=${i.label}
+            @click=${() => this._setRoute(i.id)} aria-label=${i.label}
+            aria-current=${this._route === i.id ? 'page' : 'false'}>
+            ${this._tile(i, { active: this._route === i.id })}
+            ${this._route === i.id ? html`<span class="label">${i.label}</span>` : nothing}
+          </button>`)}
+      </nav>`;
+  }
+
+  _renderMore(items) {
+    const list = items.filter(i => !i.home);
+    return html`
+      <div class="scrim" @click=${() => { this._moreOpen = false; }}></div>
+      <section class="sheet" role="dialog" aria-label="All sections"
+        @pointerdown=${this._sheetDown} @pointermove=${this._sheetMove} @pointerup=${this._sheetUp} @pointercancel=${this._sheetUp}>
+        <div class="grabber"></div>
+        <div class="grid">
+          ${list.map(i => html`
+            <button class="grid-item" @click=${() => this._setRoute(i.id)}>
+              ${this._tile(i, { size: 'lg' })}
+              <span class="label">${i.label}</span>
+            </button>`)}
+        </div>
+      </section>`;
+  }
+
+  // swipe-down-to-close for the More sheet
+  _sheetDown = e => {
+    if (e.target.closest('.grid-item') && e.pointerType === 'mouse') return;
+    this._drag = { y: e.clientY, dy: 0, el: e.currentTarget };
+  };
+  _sheetMove = e => {
+    if (!this._drag) return;
+    const dy = Math.max(0, e.clientY - this._drag.y);
+    this._drag.dy = dy;
+    if (dy > 6) this._drag.el.style.transform = `translateY(${dy}px)`;
+  };
+  _sheetUp = () => {
+    if (!this._drag) return;
+    const { dy, el } = this._drag;
+    this._drag = null;
+    el.style.transform = '';
+    if (dy > 90) this._moreOpen = false;
+  };
+
+  static styles = [hubTokens, css`
+    :host {
+      display: block;
+      height: 100%;
+      min-height: 420px;
+      position: relative;
+      overflow: hidden;
+      background: var(--hub-bg);
+      font-family: var(--paper-font-body1_-_font-family, 'Roboto', system-ui, sans-serif);
+      box-sizing: border-box;
+      border-radius: var(--ha-card-border-radius, 12px);
+    }
+    :host(.panel), :host([panel]) { border-radius: 0; }
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    button { font: inherit; color: inherit; }
+
+    .shell { height: 100%; display: flex; min-height: 0; }
+    .shell.bar-layout { flex-direction: column; }
+    .shell.rail-layout { flex-direction: row; }
+    .stage { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; position: relative; }
+    .module { flex: 1; min-height: 0; display: block; position: relative; }
+    .module > * { display: block; height: 100%; }
+
+    /* ---- sub tabs ---- */
+    .subtabs {
+      display: flex; gap: 6px; padding: 10px 12px 6px; overflow-x: auto; flex: none;
+      scrollbar-width: none;
+    }
+    .subtabs::-webkit-scrollbar { display: none; }
+    .subtab {
+      display: inline-flex; align-items: center; gap: 6px; flex: none;
+      padding: 7px 14px; border-radius: 999px; border: 1px solid var(--hub-border);
+      background: transparent; color: var(--hub-muted); cursor: pointer; font-size: 13.5px; font-weight: 600;
+    }
+    .subtab ha-icon { --mdc-icon-size: 18px; }
+    .subtab.active { background: var(--hub-accent); color: var(--hub-accent-ink); border-color: transparent; }
+
+    /* ---- tiles (shared by bar, rail and sheet) ---- */
+    .tile {
+      position: relative; display: inline-flex; align-items: center; justify-content: center;
+      width: 42px; height: 42px; border-radius: 14px; flex: none;
+      background: color-mix(in srgb, var(--c) 20%, transparent);
+      color: var(--c);
+      transition: background .15s, color .15s, transform .15s;
+      --mdc-icon-size: 24px;
+    }
+    .tile.lg { width: 54px; height: 54px; border-radius: 17px; --mdc-icon-size: 28px; }
+    .tile.active { background: var(--c); color: var(--hub-accent-ink); }
+    :host(:not([data-mode="light"])) .tile.active { color: #0d2233; }
+    .tile.more { background: rgba(160, 178, 197, 0.16); color: var(--hub-muted); }
+    :host([data-mode="light"]) .tile.more { background: rgba(60, 80, 100, 0.1); }
+    .tile.more.active { background: var(--hub-accent); color: var(--hub-accent-ink); }
+    .lock {
+      position: absolute; top: -5px; right: -5px; width: 20px; height: 20px; border-radius: 50%;
+      background: var(--hub-sheet); border: 1px solid var(--hub-border); color: var(--hub-muted);
+      display: flex; align-items: center; justify-content: center; --mdc-icon-size: 12px;
+    }
+    .label { font-size: 12px; font-weight: 600; color: var(--hub-muted); line-height: 1.15; }
+
+    /* ---- bottom bar (phone) ---- */
+    .bar {
+      flex: none; display: flex; justify-content: space-around; align-items: flex-start;
+      margin: 6px 10px calc(10px + env(safe-area-inset-bottom, 0px)); padding: 10px 6px 9px;
+      background: var(--hub-nav); border: 1px solid var(--hub-border); border-radius: 28px;
+      box-shadow: var(--hub-shadow); backdrop-filter: blur(14px);
+    }
+    .bar-item {
+      flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 5px;
+      background: none; border: none; cursor: pointer; padding: 0; -webkit-tap-highlight-color: transparent;
+    }
+    .bar-item.active .label { color: var(--hub-text); font-weight: 800; }
+    .bar-item:active .tile { transform: scale(.94); }
+
+    /* ---- rail (tablet) ---- */
+    .rail {
+      flex: none; width: 76px; margin: 10px 0 10px 10px; padding: 12px 0;
+      display: flex; flex-direction: column; align-items: center; gap: 6px; overflow-y: auto; scrollbar-width: none;
+      background: var(--hub-nav); border: 1px solid var(--hub-border); border-radius: 28px; box-shadow: var(--hub-shadow);
+    }
+    .rail::-webkit-scrollbar { display: none; }
+    .rail-item {
+      background: none; border: none; cursor: pointer; padding: 3px 0; width: 100%;
+      display: flex; flex-direction: column; align-items: center; gap: 3px;
+    }
+    .rail-item.active .label { color: var(--hub-text); font-weight: 800; }
+    .rail-item:hover .tile:not(.active) { background: color-mix(in srgb, var(--c) 30%, transparent); }
+
+    /* ---- more sheet ---- */
+    .scrim { position: absolute; inset: 0; background: rgba(4, 12, 20, 0.55); z-index: 20; animation: fade .18s ease; }
+    .sheet {
+      position: absolute; left: 0; right: 0; bottom: 0; z-index: 21; max-height: 88%; overflow-y: auto;
+      background: var(--hub-sheet); border-radius: 30px 30px 0 0; padding: 12px 16px calc(28px + env(safe-area-inset-bottom, 0px));
+      box-shadow: var(--hub-shadow); animation: rise .24s cubic-bezier(.2,.8,.2,1);
+      touch-action: pan-y;
+    }
+    .grabber { width: 44px; height: 5px; border-radius: 3px; background: rgba(160, 190, 215, .55); margin: 2px auto 22px; }
+    .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 26px 4px; }
+    .grid-item {
+      background: none; border: none; cursor: pointer; padding: 0;
+      display: flex; flex-direction: column; align-items: center; gap: 9px; min-width: 0;
+    }
+    .grid-item .label { color: var(--hub-text); font-weight: 700; font-size: 12.5px; }
+    @keyframes rise { from { transform: translateY(40px); opacity: 0; } }
+    @keyframes fade { from { opacity: 0; } }
+
+    /* ---- states ---- */
+    .center { height: 100%; display: flex; align-items: center; justify-content: center; padding: 24px; }
+    .spinner {
+      width: 34px; height: 34px; border-radius: 50%; border: 3px solid var(--hub-border);
+      border-top-color: var(--hub-accent); animation: spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .error-card {
+      max-width: 420px; text-align: center; padding: 28px; border-radius: 22px;
+      background: var(--hub-surface); border: 1px solid var(--hub-border); display: grid; gap: 10px; justify-items: center;
+    }
+    .error-card ha-icon { --mdc-icon-size: 40px; color: #e8a04a; }
+    .error-card h3 { margin: 0; }
+    .error-card p { margin: 0; color: var(--hub-muted); font-size: 14px; }
+    .error-card code { font-size: 12px; color: var(--hub-muted); }
+    .btn {
+      border: none; border-radius: 999px; padding: 9px 20px; cursor: pointer; font-weight: 700;
+      background: var(--hub-accent); color: var(--hub-accent-ink);
+    }
+  `];
+}
+
+// One class per custom element: the dashboard card and the sidebar panel share all behaviour.
+class KshFamilyHubPanel extends KshFamilyHubCard {
+  connectedCallback() { this.setAttribute('panel', ''); super.connectedCallback(); }
+}
+
+if (!customElements.get('ksh-family-hub-card')) customElements.define('ksh-family-hub-card', KshFamilyHubCard);
+if (!customElements.get('ksh-family-hub-panel')) customElements.define('ksh-family-hub-panel', KshFamilyHubPanel);
+
+window.customCards = window.customCards || [];
+if (!window.customCards.some(c => c.type === 'ksh-family-hub-card')) {
+  window.customCards.push({
+    type: 'ksh-family-hub-card',
+    name: 'KSH Family Hub',
+    description: 'Recipes, meal planner and shopping lists in one app.',
+    preview: false,
+    documentationURL: 'https://github.com/thekiwismarthome/ksh-family-hub',
+  });
+}
