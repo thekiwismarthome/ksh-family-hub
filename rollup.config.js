@@ -21,6 +21,16 @@ const locales = Object.fromEntries(
   ['de', 'es', 'fr', 'it', 'nl', 'pt'].map(l => [`locales/${l}`, `src/modules/recipes/locales/${l}.js`])
 );
 
+// Static assets served next to the bundle
+function copyAssets() {
+  return {
+    name: 'copy-assets',
+    generateBundle() {
+      this.emitFile({ type: 'asset', fileName: 'ksh-logo.png', source: readFileSync('src/assets/ksh-logo.png') });
+    },
+  };
+}
+
 function clean() {
   return { name: 'clean', buildStart() { rmSync(OUT, { recursive: true, force: true }); } };
 }
@@ -35,6 +45,7 @@ export default {
   },
   plugins: [
     clean(),
+    copyAssets(),
     injectVersion(),
     resolve({ browser: true, preferBuiltins: false }),
     commonjs(),

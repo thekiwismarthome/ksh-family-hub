@@ -23,13 +23,11 @@ export const SUB_TABS = {
   shopping: [
     { view: 'shopping', label: 'Shopping', icon: 'mdi:cart-outline' },
     { view: 'lists',    label: 'Lists',    icon: 'mdi:format-list-bulleted' },
-    { view: 'settings', label: 'Settings', icon: 'mdi:cog-outline' },
   ],
   meals: [
     { view: 'grid',     label: 'Recipes',  icon: 'mdi:book-open-variant' },
     { view: 'planner',  label: 'Planner',  icon: 'mdi:calendar-week' },
     { view: 'timers',   label: 'Timers',   icon: 'mdi:timer-outline' },
-    { view: 'settings', label: 'Settings', icon: 'mdi:cog-outline' },
   ],
 };
 

@@ -84,19 +84,10 @@ class KshHubHome extends LitElement {
     return html`
       <div class="page">
         <header>
-          ${this.panel ? html`
-            <button class="gear menu" title="Menu" aria-label="Open the Home Assistant sidebar"
-              @click=${() => this.dispatchEvent(new CustomEvent('hass-toggle-menu', { bubbles: true, composed: true }))}>
-              <ha-icon icon="mdi:menu"></ha-icon>
-            </button>` : nothing}
           <div class="greet">
             <h1>${this._greeting}</h1>
             <p class="date">${today}</p>
           </div>
-          <button class="gear" title="Hub settings" aria-label="Hub settings"
-            @click=${() => this.dispatchEvent(new CustomEvent('hub-open-settings', { bubbles: true, composed: true }))}>
-            <ha-icon icon="mdi:cog-outline"></ha-icon>
-          </button>
         </header>
 
         <div class="cards">

@@ -12,6 +12,7 @@ import './modules/shopping/shopping-list-manager-card.js'; // <ksh-shopping-modu
 const ROUTE_KEY = 'ksh_hub_route';
 const THEME_KEY = 'ksh_hub_theme';
 const RAIL_MIN_WIDTH = 700;
+const LOGO_URL = `/ksh_family_hub/static/ksh-logo.png?v=${CARD_VERSION}`;
 
 // Menu entries backed by a real module element
 const MODULE_ELEMENT = { shopping: 'ksh-shopping-module', cards: 'ksh-shopping-module', meals: 'ksh-recipes-module' };
@@ -227,6 +228,51 @@ export class KshFamilyHubCard extends LitElement {
     else if (this._route === 'meals') el.setHubView(view);
   }
 
+  // The gear on every page: that page's own settings (Shopping, Meals) or the hub settings
+  _openSettings() {
+    const route = this._route;
+    if (route === 'shopping' || route === 'cards') {
+      if (route === 'cards') this._setRoute('shopping');
+      const el = this.renderRoot.querySelector('#mod-shopping');
+      this._subView = { ...this._subView, shopping: 'settings' };
+      if (el) el.currentView = 'settings';
+    } else if (route === 'meals') {
+      this._subView = { ...this._subView, meals: 'settings' };
+      this.renderRoot.querySelector('#mod-meals')?.setHubView('settings');
+    } else {
+      this._setRoute('settings');
+    }
+  }
+
+  _topbar() {
+    const route = this._route;
+    const sub = this._subView[route] || MODULE_DEFAULT_VIEW[route];
+    const own = MODULE_ELEMENT[route];
+    const active = route === 'settings' || (own && sub === 'settings');
+    const title = route === 'home' ? '' : route === 'settings' ? 'Hub settings' : (itemById(route)?.label || '');
+    return html`
+      <header class="topbar">
+        ${this._isPanel ? html`
+          <button class="icon-btn" title="Menu" aria-label="Open the Home Assistant sidebar"
+            @click=${() => this.dispatchEvent(new CustomEvent('hass-toggle-menu', { bubbles: true, composed: true }))}>
+            <ha-icon icon="mdi:menu"></ha-icon>
+          </button>` : nothing}
+        ${!this._rail ? this._logo() : nothing}
+        <h1 class="page-title">${title}</h1>
+        <button class="icon-btn ${active ? 'active' : ''}" title="Settings" aria-label="Settings"
+          @click=${() => this._openSettings()}>
+          <ha-icon icon="mdi:cog-outline"></ha-icon>
+        </button>
+      </header>`;
+  }
+
+  _logo() {
+    return html`
+      <button class="logo" title="KSH Family Hub" aria-label="KSH Family Hub, go to Home" @click=${() => this._setRoute('home')}>
+        <img src=${LOGO_URL} alt="KSH" draggable="false">
+      </button>`;
+  }
+
   _onModuleView(id, e) {
     this._subView = { ...this._subView, [id]: e.detail.view };
   }
@@ -242,6 +288,7 @@ export class KshFamilyHubCard extends LitElement {
       <div class="shell ${this._rail ? 'rail-layout' : 'bar-layout'}">
         ${this._rail ? this._renderRail(items) : nothing}
         <main class="stage">
+          ${this._topbar()}
           ${this._renderStage()}
         </main>
         ${!this._rail ? this._renderBar(items) : nothing}
@@ -345,6 +392,7 @@ export class KshFamilyHubCard extends LitElement {
   _renderRail(items) {
     return html`
       <nav class="rail" aria-label="Main">
+        ${this._logo()}
         ${items.map(i => html`
           <button class="rail-item ${this._route === i.id ? 'active' : ''}" title=${i.label}
             @click=${() => this._setRoute(i.id)} aria-label=${i.label}
@@ -414,6 +462,21 @@ export class KshFamilyHubCard extends LitElement {
     .stage { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; position: relative; }
     .module { flex: 1; min-height: 0; display: block; position: relative; }
     .module > * { display: block; height: 100%; }
+
+    /* ---- top bar: logo (phone), page title, settings gear ---- */
+    .topbar { flex: none; display: flex; align-items: center; gap: 10px; padding: 10px 14px 2px; min-height: 62px; }
+    .page-title { flex: 1; min-width: 0; margin: 0; font-size: 20px; font-weight: 800; letter-spacing: -0.01em;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--hub-text); }
+    .icon-btn {
+      flex: none; width: 42px; height: 42px; border-radius: 50%; border: 1px solid var(--hub-border); cursor: pointer;
+      background: var(--hub-surface); color: var(--hub-muted); display: flex; align-items: center; justify-content: center;
+      --mdc-icon-size: 22px; transition: background .15s, color .15s;
+    }
+    .icon-btn:hover { color: var(--hub-text); }
+    .icon-btn.active { background: var(--hub-accent); color: var(--hub-accent-ink); border-color: transparent; }
+    .logo { flex: none; width: 50px; height: 50px; padding: 0; border: none; background: none; cursor: pointer; border-radius: 15px; line-height: 0; }
+    .logo img { width: 100%; height: 100%; display: block; border-radius: 15px; }
+    .rail .logo { margin: 0 0 8px; }
 
     /* ---- sub tabs ---- */
     .subtabs {
