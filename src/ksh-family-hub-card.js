@@ -14,7 +14,7 @@ const THEME_KEY = 'ksh_hub_theme';
 const RAIL_MIN_WIDTH = 700;
 
 // Menu entries backed by a real module element
-const MODULE_ELEMENT = { shopping: 'ksh-shopping-module', meals: 'ksh-recipes-module' };
+const MODULE_ELEMENT = { shopping: 'ksh-shopping-module', cards: 'ksh-shopping-module', meals: 'ksh-recipes-module' };
 const MODULE_DEFAULT_VIEW = { shopping: 'shopping', meals: 'grid' };
 // Sub views that take over the whole module (the module's own header has a back button)
 const HIDE_TABS_IN = { meals: ['detail', 'add'] };
@@ -37,6 +37,8 @@ export class KshFamilyHubCard extends LitElement {
     _theme: { state: true },
     _subView: { state: true },
     _gen: { state: true },
+    _applying: { state: true },
+    _applyError: { state: true },
   };
 
   constructor() {
@@ -50,8 +52,12 @@ export class KshFamilyHubCard extends LitElement {
     this._theme = store.get(THEME_KEY) || 'dark';
     this._subView = {};
     this._gen = 0;
-    this._visited = new Set(['home', 'settings'].includes(this._route) ? [] : [this._route]);
+    this._visited = new Set();
+    if (!['home', 'settings'].includes(this._route)) this._visited.add(this._route === 'cards' ? 'shopping' : this._route);
     this._infoRequested = false;
+    this._pending = null;
+    this._applying = false;
+    this._applyError = null;
     this._isPanel = false;
   }
 
@@ -102,13 +108,24 @@ export class KshFamilyHubCard extends LitElement {
 
   updated(changed) {
     if (changed.has('_theme') || changed.has('hass')) this._applyMode();
+    if (changed.has('_route') || changed.has('_gen') || changed.has('_info')) this._syncShoppingView();
+  }
+
+  // Cards (loyalty cards) is its own menu entry but lives inside the shopping module
+  _syncShoppingView() {
+    const el = this.renderRoot?.querySelector('#mod-shopping');
+    if (!el) return;
+    if (this._route === 'cards' && el.currentView !== 'loyalty') el.currentView = 'loyalty';
+    else if (this._route === 'shopping' && el.currentView === 'loyalty') el.currentView = 'shopping';
   }
 
   // ---- data ---------------------------------------------------------------
 
   async _loadInfo() {
     try {
-      this._info = await this.hass.callWS({ type: 'ksh_family_hub/get_info' });
+      const info = await this.hass.callWS({ type: 'ksh_family_hub/get_info' });
+      if (this._pending) return;
+      this._info = info;
       this._error = null;
       // A route may point at a module that has since been switched off
       if (!this._available(this._route)) this._setRoute('home');
@@ -117,40 +134,75 @@ export class KshFamilyHubCard extends LitElement {
     }
   }
 
-  async _setModules(patch) {
-    await this.hass.callWS({ type: 'ksh_family_hub/set_modules', ...patch });
-    // The integration reloads itself; wait for it to come back with the new flags
-    const want = patch;
-    for (let i = 0; i < 20; i++) {
-      await new Promise(r => setTimeout(r, 1000));
+  /**
+   * Apply a change from Hub settings. The menus update straight away; the backend is told
+   * in the background, one request at a time, so several switches can be flipped in a row
+   * without waiting for Home Assistant to reload.
+   */
+  _applyConfig(patch) {
+    const info = this._info;
+    // `items` is a delta ({id: shown}) so quick successive clicks never overwrite each other
+    let hidden = info.hidden || [];
+    if (patch.items) {
+      const set = new Set(hidden);
+      for (const [id, shown] of Object.entries(patch.items)) { if (shown) set.delete(id); else set.add(id); }
+      hidden = [...set];
+    }
+    const next = { ...info, modules: { ...info.modules, ...(patch.modules || {}) }, hidden };
+    const reloads = Object.keys(patch.modules || {}).some(k => !!patch.modules[k] !== !!info.modules[k]);
+    this._info = next;
+    if (reloads) { this._gen += 1; this._visited = new Set(); }
+    if (!this._available(this._route)) this._setRoute('home');
+
+    const send = { ...(patch.modules || {}) };
+    if (patch.items) send.hidden = hidden;
+    this._pending = { ...(this._pending || {}), ...send };
+    if (!this._applying) this._flush();
+  }
+
+  async _flush() {
+    this._applying = true;
+    this._applyError = null;
+    try {
+      while (this._pending) {
+        const patch = this._pending;
+        this._pending = null;
+        const res = await this.hass.callWS({ type: 'ksh_family_hub/set_modules', ...patch });
+        const moduleChange = ['recipes', 'shopping'].some(k => k in patch);
+        if (moduleChange) await this._waitForModules(res.modules);
+      }
+      if (!this._pending) await this._loadInfo();
+    } catch (err) {
+      this._applyError = err?.message || 'Could not save';
+      await this._loadInfo();
+    }
+    this._applying = false;
+    this.requestUpdate();
+  }
+
+  // The integration reloads itself after a part is switched; wait until it answers again
+  async _waitForModules(want) {
+    for (let i = 0; i < 25; i++) {
+      await new Promise(r => setTimeout(r, 800));
       try {
         const info = await this.hass.callWS({ type: 'ksh_family_hub/get_info' });
-        const ok = Object.entries(want).every(([k, v]) => !!info.modules?.[k] === v);
-        if (ok) {
-          this._info = info;
-          this._gen += 1;               // rebuild module elements against the new backend
-          this._visited = new Set();
-          if (!this._available(this._route)) this._setRoute('home');
-          return;
-        }
-      } catch { /* integration still reloading */ }
+        if (Object.entries(want).every(([k, v]) => !!info.modules?.[k] === !!v)) return;
+      } catch { /* still reloading */ }
     }
-    await this._loadInfo();
   }
 
   // ---- routing ------------------------------------------------------------
 
   _available(id) {
-    const item = itemById(id);
-    if (!item) return false;
-    return !item.module || !!this._info?.modules?.[item.module];
+    if (id === 'settings') return true;
+    return visibleItems(this._info?.modules, this._info?.hidden).some(i => i.id === id);
   }
 
   _setRoute(id) {
     if (id === 'settings') { this._route = 'settings'; this._moreOpen = false; return; }
     this._route = id;
     this._moreOpen = false;
-    if (id !== 'home') this._visited.add(id);
+    if (id !== 'home') this._visited.add(id === 'cards' ? 'shopping' : id);
     store.set(ROUTE_KEY, id);
   }
 
@@ -185,7 +237,7 @@ export class KshFamilyHubCard extends LitElement {
     if (this._error) return this._renderError();
     if (!this._info) return html`<div class="center"><div class="spinner"></div></div>`;
 
-    const items = visibleItems(this._info.modules);
+    const items = visibleItems(this._info.modules, this._info.hidden);
     return html`
       <div class="shell ${this._rail ? 'rail-layout' : 'bar-layout'}">
         ${this._rail ? this._renderRail(items) : nothing}
@@ -224,15 +276,15 @@ export class KshFamilyHubCard extends LitElement {
 
     return html`
       ${route === 'home' ? html`
-        <ksh-hub-home .hass=${this.hass} .modules=${this._info.modules} .dark=${dark} .panel=${this._isPanel}
+        <ksh-hub-home .hass=${this.hass} .modules=${this._info.modules} .hidden=${this._info.hidden} .dark=${dark} .panel=${this._isPanel}
           @hub-navigate=${this._onNavigate}
           @hub-open-settings=${() => this._setRoute('settings')}></ksh-hub-home>` : nothing}
 
       ${route === 'settings' ? html`
         <ksh-hub-settings .hass=${this.hass} .info=${this._info} .theme=${this._theme}
-          .cardVersion=${CARD_VERSION}
+          .cardVersion=${CARD_VERSION} .applying=${this._applying} .applyError=${this._applyError}
           @hub-theme=${e => this._setTheme(e.detail.theme)}
-          @hub-modules=${e => this._setModules(e.detail)}
+          @hub-config=${e => this._applyConfig(e.detail)}
           @hub-back=${() => this._setRoute('home')}></ksh-hub-settings>` : nothing}
 
       ${!mod && route !== 'home' && route !== 'settings' ? html`
@@ -249,7 +301,7 @@ export class KshFamilyHubCard extends LitElement {
 
       ${keyed(this._gen, html`
         ${this._visited.has('shopping') && this._info.modules.shopping ? html`
-          <div class="module" ?hidden=${route !== 'shopping'}>
+          <div class="module" ?hidden=${route !== 'shopping' && route !== 'cards'}>
             <ksh-shopping-module id="mod-shopping" hub-mode
               .hass=${this.hass} .hostUi=${ui} .hostDark=${dark}
               @module-view-changed=${e => this._onModuleView('shopping', e)}></ksh-shopping-module>
@@ -268,7 +320,6 @@ export class KshFamilyHubCard extends LitElement {
     return html`
       <span class="tile ${active ? 'active' : ''} ${size}" style="--c:${item.color}">
         <ha-icon icon=${item.icon}></ha-icon>
-        ${item.locked ? html`<span class="lock"><ha-icon icon="mdi:lock-outline"></ha-icon></span>` : nothing}
       </span>`;
   }
 
@@ -393,11 +444,6 @@ export class KshFamilyHubCard extends LitElement {
     .tile.more { background: rgba(160, 178, 197, 0.16); color: var(--hub-muted); }
     :host([data-mode="light"]) .tile.more { background: rgba(60, 80, 100, 0.1); }
     .tile.more.active { background: var(--hub-accent); color: var(--hub-accent-ink); }
-    .lock {
-      position: absolute; top: -5px; right: -5px; width: 20px; height: 20px; border-radius: 50%;
-      background: var(--hub-sheet); border: 1px solid var(--hub-border); color: var(--hub-muted);
-      display: flex; align-items: center; justify-content: center; --mdc-icon-size: 12px;
-    }
     .label { font-size: 12px; font-weight: 600; color: var(--hub-muted); line-height: 1.15; }
 
     /* ---- bottom bar (phone) ---- */

@@ -13,7 +13,7 @@ import{A as e,i as t,a as i,b as r,L as s,c as n,m as a,s as o,E as c}from"./chu
  * @license
  * Copyright 2021 Google LLC
  * SPDX-License-Identifier: BSD-3-Clause
- */})(e),this.key=t),i}}),m="0.1.0-beta.1",g=[{id:"home",label:"Home",icon:"mdi:home-outline",color:"#7fe3c8",primary:!0,home:!0},{id:"shopping",label:"Shopping",icon:"mdi:cart-outline",color:"#2fb585",primary:!0,module:"shopping"},{id:"meals",label:"Meals",icon:"mdi:silverware-fork-knife",color:"#f0903f",primary:!0,module:"recipes"},{id:"wishlist",label:"Wishlist",icon:"mdi:heart-outline",color:"#e8639f",primary:!0,soon:!0},{id:"chores",label:"Chores",icon:"mdi:check-circle-outline",color:"#3db6cc",soon:!0},{id:"finances",label:"Finances",icon:"mdi:wallet-outline",color:"#4a86f0",soon:!0},{id:"medicine",label:"Medicine",icon:"mdi:bottle-tonic-plus-outline",color:"#33b98a",soon:!0},{id:"reminders",label:"Reminders",icon:"mdi:bell-outline",color:"#6f80f2",soon:!0},{id:"birthdays",label:"Birthdays",icon:"mdi:cake-variant-outline",color:"#cf6fb6",soon:!0},{id:"expiry",label:"Expiry",icon:"mdi:archive-outline",color:"#e46d5e",soon:!0},{id:"cards",label:"Cards",icon:"mdi:credit-card-outline",color:"#7069f2",soon:!0},{id:"routines",label:"Routines",icon:"mdi:weather-sunny-off",color:"#e2ac3f",soon:!0},{id:"timetables",label:"Timetables",icon:"mdi:view-week-outline",color:"#7388d8",soon:!0,locked:!0},{id:"chat",label:"Chat",icon:"mdi:forum-outline",color:"#6272dc",soon:!0,locked:!0},{id:"location",label:"Location",icon:"mdi:map-marker-outline",color:"#e5755f",soon:!0,locked:!0}],f={shopping:[{view:"shopping",label:"Shopping",icon:"mdi:cart-outline"},{view:"lists",label:"Lists",icon:"mdi:format-list-bulleted"},{view:"loyalty",label:"Cards",icon:"mdi:card-account-details-outline"},{view:"settings",label:"Settings",icon:"mdi:cog-outline"}],meals:[{view:"grid",label:"Recipes",icon:"mdi:book-open-variant"},{view:"planner",label:"Planner",icon:"mdi:calendar-week"},{view:"timers",label:"Timers",icon:"mdi:timer-outline"},{view:"settings",label:"Settings",icon:"mdi:cog-outline"}]};function b(e){return g.filter(t=>!t.module||e?.[t.module])}const v=e=>g.find(t=>t.id===e),y=t`
+ */})(e),this.key=t),i}}),m="0.1.0-beta.2",g=[{id:"home",label:"Home",icon:"mdi:home-outline",color:"#7fe3c8",primary:!0,home:!0},{id:"shopping",label:"Shopping",icon:"mdi:cart-outline",color:"#2fb585",primary:!0,module:"shopping"},{id:"meals",label:"Meals",icon:"mdi:silverware-fork-knife",color:"#f0903f",primary:!0,module:"recipes"},{id:"wishlist",label:"Wishlist",icon:"mdi:heart-outline",color:"#e8639f",primary:!0,soon:!0},{id:"chores",label:"Chores",icon:"mdi:check-circle-outline",color:"#3db6cc",soon:!0},{id:"finances",label:"Finances",icon:"mdi:wallet-outline",color:"#4a86f0",soon:!0},{id:"medicine",label:"Medicine",icon:"mdi:bottle-tonic-plus-outline",color:"#33b98a",soon:!0},{id:"reminders",label:"Reminders",icon:"mdi:bell-outline",color:"#6f80f2",soon:!0},{id:"birthdays",label:"Birthdays",icon:"mdi:cake-variant-outline",color:"#cf6fb6",soon:!0},{id:"expiry",label:"Expiry",icon:"mdi:archive-outline",color:"#e46d5e",soon:!0},{id:"cards",label:"Cards",icon:"mdi:credit-card-outline",color:"#7069f2",module:"shopping"},{id:"routines",label:"Routines",icon:"mdi:weather-sunny-off",color:"#e2ac3f",soon:!0},{id:"timetables",label:"Timetables",icon:"mdi:view-week-outline",color:"#7388d8",soon:!0},{id:"chat",label:"Chat",icon:"mdi:forum-outline",color:"#6272dc",soon:!0},{id:"location",label:"Location",icon:"mdi:map-marker-outline",color:"#e5755f",soon:!0}],f={shopping:[{view:"shopping",label:"Shopping",icon:"mdi:cart-outline"},{view:"lists",label:"Lists",icon:"mdi:format-list-bulleted"},{view:"settings",label:"Settings",icon:"mdi:cog-outline"}],meals:[{view:"grid",label:"Recipes",icon:"mdi:book-open-variant"},{view:"planner",label:"Planner",icon:"mdi:calendar-week"},{view:"timers",label:"Timers",icon:"mdi:timer-outline"},{view:"settings",label:"Settings",icon:"mdi:cog-outline"}]};function b(e,t=[]){return g.filter(i=>i.home||(!i.module||e?.[i.module])&&!t.includes(i.id))}const v=t`
   :host {
     --hub-bg: linear-gradient(180deg, #17293c 0%, #0f1c2a 100%);
     --hub-surface: #162b41;
@@ -41,7 +41,7 @@ import{A as e,i as t,a as i,b as r,L as s,c as n,m as a,s as o,E as c}from"./chu
     --hub-accent-ink: #ffffff;
     --hub-shadow: 0 10px 30px rgba(20, 40, 60, 0.18);
   }
-`,w=["breakfast","lunch","dinner","snack","dessert"];class x extends i{static properties={hass:{type:Object},modules:{type:Object},dark:{type:Boolean},panel:{type:Boolean},_shopping:{state:!0},_meals:{state:!0},_loaded:{state:!0}};constructor(){super(),this._shopping=null,this._meals=null,this._loaded=!1,this._requested=!1}willUpdate(e){(e.has("hass")||e.has("modules"))&&this.hass&&this.modules&&!this._requested&&(this._requested=!0,this._load())}async _load(){const e=[];this.modules.shopping&&e.push(this._loadShopping()),this.modules.recipes&&e.push(this._loadMeals()),await Promise.allSettled(e),this._loaded=!0}async _loadShopping(){try{const{lists:e=[]}=await this.hass.callWS({type:"ksh_shopping/lists/get_all"}),t=e.find(e=>e.active)||e[0];if(!t)return void(this._shopping={list:null,open:0});const{items:i=[]}=await this.hass.callWS({type:"ksh_shopping/items/get",list_id:t.id});this._shopping={list:t,open:i.filter(e=>!e.checked).length}}catch{this._shopping=null}}async _loadMeals(){try{const{entries:e=[]}=await this.hass.callWS({type:"ksh_recipes/meal_plan/get"}),t=(()=>{const e=new Date,t=e=>String(e).padStart(2,"0");return`${e.getFullYear()}-${t(e.getMonth()+1)}-${t(e.getDate())}`})();this._meals=e.filter(e=>e.date===t).sort((e,t)=>w.indexOf(e.meal_type)-w.indexOf(t.meal_type))}catch{this._meals=null}}_go(e){this.dispatchEvent(new CustomEvent("hub-navigate",{detail:{id:e},bubbles:!0,composed:!0}))}get _greeting(){const e=(new Date).getHours(),t=e<5?"Good evening":e<12?"Good morning":e<18?"Good afternoon":"Good evening",i=(this.hass?.user?.name||"").split(" ")[0];return i?`${t}, ${i}`:t}render(){const t=(new Date).toLocaleDateString(this.hass?.locale?.language||void 0,{weekday:"long",day:"numeric",month:"long"}),i=b(this.modules).filter(e=>!e.home);return r`
+`,y=["breakfast","lunch","dinner","snack","dessert"];class w extends i{static properties={hass:{type:Object},modules:{type:Object},hidden:{type:Array},dark:{type:Boolean},panel:{type:Boolean},_shopping:{state:!0},_meals:{state:!0},_loaded:{state:!0}};constructor(){super(),this._shopping=null,this._meals=null,this._loaded=!1,this._requested=!1}willUpdate(e){(e.has("hass")||e.has("modules"))&&this.hass&&this.modules&&!this._requested&&(this._requested=!0,this._load())}async _load(){const e=[];this.modules.shopping&&e.push(this._loadShopping()),this.modules.recipes&&e.push(this._loadMeals()),await Promise.allSettled(e),this._loaded=!0}async _loadShopping(){try{const{lists:e=[]}=await this.hass.callWS({type:"ksh_shopping/lists/get_all"}),t=e.find(e=>e.active)||e[0];if(!t)return void(this._shopping={list:null,open:0});const{items:i=[]}=await this.hass.callWS({type:"ksh_shopping/items/get",list_id:t.id});this._shopping={list:t,open:i.filter(e=>!e.checked).length}}catch{this._shopping=null}}async _loadMeals(){try{const{entries:e=[]}=await this.hass.callWS({type:"ksh_recipes/meal_plan/get"}),t=(()=>{const e=new Date,t=e=>String(e).padStart(2,"0");return`${e.getFullYear()}-${t(e.getMonth()+1)}-${t(e.getDate())}`})();this._meals=e.filter(e=>e.date===t).sort((e,t)=>y.indexOf(e.meal_type)-y.indexOf(t.meal_type))}catch{this._meals=null}}_go(e){this.dispatchEvent(new CustomEvent("hub-navigate",{detail:{id:e},bubbles:!0,composed:!0}))}get _greeting(){const e=(new Date).getHours(),t=e<5?"Good evening":e<12?"Good morning":e<18?"Good afternoon":"Good evening",i=(this.hass?.user?.name||"").split(" ")[0];return i?`${t}, ${i}`:t}render(){const t=(new Date).toLocaleDateString(this.hass?.locale?.language||void 0,{weekday:"long",day:"numeric",month:"long"}),i=b(this.modules,this.hidden).filter(e=>!e.home);return r`
       <div class="page">
         <header>
           ${this.panel?r`
@@ -71,13 +71,12 @@ import{A as e,i as t,a as i,b as r,L as s,c as n,m as a,s as o,E as c}from"./chu
 
         <h3 class="section">Your hub</h3>
         <div class="grid">
-          ${i.map(t=>r`
-            <button class="grid-item" @click=${()=>this._go(t.id)}>
-              <span class="tile" style="--c:${t.color}">
-                <ha-icon icon=${t.icon}></ha-icon>
-                ${t.locked?r`<span class="lock"><ha-icon icon="mdi:lock-outline"></ha-icon></span>`:e}
+          ${i.map(e=>r`
+            <button class="grid-item" @click=${()=>this._go(e.id)}>
+              <span class="tile" style="--c:${e.color}">
+                <ha-icon icon=${e.icon}></ha-icon>
               </span>
-              <span class="label">${t.label}</span>
+              <span class="label">${e.label}</span>
             </button>`)}
         </div>
       </div>`}_shoppingCard(){const e=this._shopping,t=g.find(e=>"shopping"===e.id).color;return r`
@@ -93,7 +92,7 @@ import{A as e,i as t,a as i,b as r,L as s,c as n,m as a,s as o,E as c}from"./chu
         ${this._loaded||e?e?e.length?r`<ul>${e.map(e=>r`
               <li><span class="kind">${e.meal_type}</span><span class="name">${e.recipe_name||"Recipe"}</span></li>`)}</ul>`:r`<p class="muted">Nothing planned for today.</p>`:r`<p class="muted">Couldn't load the meal plan.</p>`:r`<p class="muted">Loading…</p>`}
         <button class="link" @click=${()=>this._go("meals")}>Open meals <ha-icon icon="mdi:chevron-right"></ha-icon></button>
-      </section>`}static styles=[y,t`
+      </section>`}static styles=[v,t`
     :host { display: block; flex: 1; min-height: 0; overflow-y: auto; }
     * { box-sizing: border-box; }
     button { font: inherit; color: inherit; }
@@ -137,35 +136,31 @@ import{A as e,i as t,a as i,b as r,L as s,c as n,m as a,s as o,E as c}from"./chu
       position: relative; width: 54px; height: 54px; border-radius: 17px; display: inline-flex; align-items: center; justify-content: center;
       background: color-mix(in srgb, var(--c) 20%, transparent); color: var(--c); --mdc-icon-size: 28px;
     }
-    .lock {
-      position: absolute; top: -5px; right: -5px; width: 20px; height: 20px; border-radius: 50%; --mdc-icon-size: 12px;
-      background: var(--hub-sheet); border: 1px solid var(--hub-border); color: var(--hub-muted);
-      display: flex; align-items: center; justify-content: center;
-    }
     .label { font-size: 12.5px; font-weight: 700; }
-  `]}customElements.define("ksh-hub-home",x);class k extends i{static properties={hass:{type:Object},info:{type:Object},theme:{type:String},cardVersion:{type:String},_busy:{state:!0},_error:{state:!0}};constructor(){super(),this._busy=!1,this._error=null}get _isAdmin(){return!!this.hass?.user?.is_admin}_emit(e,t){this.dispatchEvent(new CustomEvent(e,{detail:t,bubbles:!0,composed:!0}))}async _toggle(e,t){const i=this.info?.modules||{},r=Object.entries(i).filter(([t])=>t!==e);t||!r.every(([,e])=>!e)?(this._error=null,this._busy=!0,this._emit("hub-modules",{[e]:t}),setTimeout(()=>{this._busy=!1},3e4)):this._error="Keep at least one part switched on."}updated(e){e.has("info")&&(this._busy=!1)}render(){const t=this.info?.modules||{},i=this._isAdmin,s=(e,s,n,a,o)=>r`
-      <div class="row" style="--c:${o}">
-        <span class="dot"><ha-icon icon=${a}></ha-icon></span>
-        <div class="txt"><div class="name">${s}</div><div class="desc">${n}</div></div>
-        <button class="switch ${t[e]?"on":""}" role="switch" aria-checked=${t[e]?"true":"false"}
-          aria-label=${s} ?disabled=${!i||this._busy}
-          @click=${()=>this._toggle(e,!t[e])}><i></i></button>
-      </div>`;return r`
+  `]}customElements.define("ksh-hub-home",w);const x={shopping:"Lists, product catalogue and supermarkets",meals:"Recipe book, meal planner and cooking timers",cards:"Loyalty cards (needs Shopping)"};class k extends i{static properties={hass:{type:Object},info:{type:Object},theme:{type:String},cardVersion:{type:String},applying:{type:Boolean},applyError:{type:String},_error:{state:!0}};constructor(){super(),this._error=null}get _isAdmin(){return!!this.hass?.user?.is_admin}_emit(e,t){this.dispatchEvent(new CustomEvent(e,{detail:t,bubbles:!0,composed:!0}))}_isOn(e){const t=this.info?.hidden||[];return!(e.module&&!this.info?.modules?.[e.module])&&("shopping"===e.id||"meals"===e.id||!t.includes(e.id))}_toggle(e,t){this._error=null;const i=this.info?.modules||{};if("shopping"===e.id||"meals"===e.id){const r=e.module,s=Object.entries(i).filter(([e])=>e!==r);return!t&&s.every(([,e])=>!e)?void(this._error="Keep at least one of Shopping and Meals switched on."):void this._emit("hub-config",{modules:{[r]:t}})}this._emit("hub-config",{items:{[e.id]:t}})}render(){const t=this._isAdmin,i=g.filter(e=>!e.home);return r`
       <div class="page">
         <header>
           <button class="back" @click=${()=>this._emit("hub-back")} aria-label="Back"><ha-icon icon="mdi:arrow-left"></ha-icon></button>
           <h1>Hub settings</h1>
+          ${this.applying?r`<span class="spin" title="Saving"></span>`:e}
         </header>
 
         <h3>Parts of the hub</h3>
-        <section class="card">
-          ${s("shopping","Shopping Lists","Lists, product catalogue, loyalty cards and supermarkets","mdi:cart-outline","#2fb585")}
-          ${s("recipes","Recipes & Meal Planner","Recipe book, meal planner and cooking timers","mdi:silverware-fork-knife","#f0903f")}
-        </section>
-        ${i?e:r`<p class="note">Only a Home Assistant administrator can switch parts on or off.</p>`}
-        ${this._busy?r`<p class="note">Applying…</p>`:e}
-        ${this._error?r`<p class="note err">${this._error}</p>`:e}
-        <p class="note">Switching a part off only hides it. Its data stays where it is.</p>
+        <section class="card">${i.map(e=>{const i=e.module&&!this.info?.modules?.[e.module]&&"shopping"!==e.id&&"meals"!==e.id,s=this._isOn(e);return r`
+        <div class="row" style="--c:${e.color}">
+          <span class="dot"><ha-icon icon=${e.icon}></ha-icon></span>
+          <div class="txt">
+            <div class="name">${e.label}</div>
+            <div class="desc">${x[e.id]||"Coming soon"}</div>
+          </div>
+          <button class="switch ${s?"on":""}" role="switch" aria-checked=${s?"true":"false"}
+            aria-label=${e.label} ?disabled=${!t||i}
+            @click=${()=>this._toggle(e,!s)}><i></i></button>
+        </div>`})}</section>
+        ${t?e:r`<p class="note">Only a Home Assistant administrator can switch parts on or off.</p>`}
+        ${this._error||this.applyError?r`<p class="note err">${this._error||this.applyError}</p>`:e}
+        <p class="note">Shopping and Meals load or unload that part of the integration (this takes a few seconds in the background).
+          The other entries only show or hide their menu item. Nothing is ever deleted: switching a part back on restores everything.</p>
 
         <h3>Appearance</h3>
         <section class="card">
@@ -180,10 +175,12 @@ import{A as e,i as t,a as i,b as r,L as s,c as n,m as a,s as o,E as c}from"./chu
         <section class="card about">
           <div><span>Integration</span><b>${this.info?.version??"—"}</b></div>
           <div><span>Card</span><b>${this.cardVersion??"—"}</b></div>
+          ${Object.entries(this.info?.imported||{}).map(([e,t])=>r`
+            <div><span>Imported ${"recipes"===e?"recipes":"shopping"} data</span><b>${t.length?`${t.length} file${1===t.length?"":"s"}`:"none found"}</b></div>`)}
         </section>
         <p class="note">On first start the hub copies your existing Recipe Manager and Shopping List Manager data.
           The originals are left untouched, so the standalone integrations keep working side by side.</p>
-      </div>`}static styles=[y,t`
+      </div>`}static styles=[v,t`
     :host { display: block; flex: 1; min-height: 0; overflow-y: auto; }
     * { box-sizing: border-box; }
     button { font: inherit; color: inherit; }
@@ -213,6 +210,8 @@ import{A as e,i as t,a as i,b as r,L as s,c as n,m as a,s as o,E as c}from"./chu
     .switch.on { background: var(--hub-accent); }
     .switch.on i { transform: translateX(20px); }
     .switch:disabled { opacity: .5; cursor: default; }
+    .spin { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--hub-border); border-top-color: var(--hub-accent); animation: spin .8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
     .note { margin: 8px 4px 0; font-size: 12.5px; color: var(--hub-muted); }
     .note.err { color: #f0a050; }
     .seg { display: flex; gap: 6px; padding: 8px; }
@@ -228,11 +227,11 @@ import{A as e,i as t,a as i,b as r,L as s,c as n,m as a,s as o,E as c}from"./chu
       <div class="wrap" style="--c:${e.color}">
         <span class="tile"><ha-icon icon=${e.icon}></ha-icon></span>
         <h2>${e.label}</h2>
-        <p>${e.locked?"This part of the hub is locked for now. It will unlock in a future release.":"This part of the hub is coming soon."}</p>
+        <p>This part of the hub is coming soon.</p>
         <button @click=${()=>this.dispatchEvent(new CustomEvent("hub-navigate",{detail:{id:"home"},bubbles:!0,composed:!0}))}>
           Back to Home
         </button>
-      </div>`:r``}static styles=[y,t`
+      </div>`:r``}static styles=[v,t`
     :host { display: flex; flex: 1; min-height: 0; align-items: center; justify-content: center; }
     .wrap { text-align: center; padding: 24px; max-width: 360px; display: grid; gap: 10px; justify-items: center; }
     .tile {
@@ -15879,7 +15878,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       --slm-cat-recent: #5A6B64;
     }
 
-  `;setConfig(e){this.config=e;const t=this._hashConfig(e);t!==this._baseCardId&&(this._baseCardId=t,this._assignedCardId=null,this._cardId=t)}getCardSize(){return 12}}customElements.define("ksh-shopping-module",xa);const ka="ksh_hub_route",Ca="ksh_hub_theme",Sa={shopping:"ksh-shopping-module",meals:"ksh-recipes-module"},Aa={shopping:"shopping",meals:"grid"},Ea={meals:["detail","add"]},Ia={get(e){try{return localStorage.getItem(e)}catch{return null}},set(e,t){try{localStorage.setItem(e,t)}catch{}}};class Ra extends i{static properties={hass:{type:Object},narrow:{type:Boolean},_config:{state:!0},_info:{state:!0},_error:{state:!0},_route:{state:!0},_rail:{state:!0},_moreOpen:{state:!0},_theme:{state:!0},_subView:{state:!0},_gen:{state:!0}};constructor(){super(),this._config={},this._info=null,this._error=null,this._route=Ia.get(ka)||"home",this._rail=!1,this._moreOpen=!1,this._theme=Ia.get(Ca)||"dark",this._subView={},this._gen=0,this._visited=new Set(["home","settings"].includes(this._route)?[]:[this._route]),this._infoRequested=!1,this._isPanel=!1}setConfig(e){this._config=e||{}}getCardSize(){return 10}static getStubConfig(){return{}}connectedCallback(){super.connectedCallback(),this._ro=new ResizeObserver(e=>{const t=e[0]?.contentRect?.width??0;t&&(this._rail=t>=700)}),this._ro.observe(this),this._onKey=e=>{"Escape"===e.key&&this._moreOpen&&(this._moreOpen=!1)},window.addEventListener("keydown",this._onKey),this._onResize=()=>this._updateHeight(),window.addEventListener("resize",this._onResize),window.visualViewport?.addEventListener("resize",this._onResize),this._isPanel="ksh-family-hub-panel"===this.localName,this._updateHeight()}disconnectedCallback(){super.disconnectedCallback(),this._ro?.disconnect(),window.removeEventListener("keydown",this._onKey),window.removeEventListener("resize",this._onResize),window.visualViewport?.removeEventListener("resize",this._onResize)}_updateHeight(){this._isPanel||requestAnimationFrame(()=>requestAnimationFrame(()=>{const e=this.getBoundingClientRect().top,t=window.innerHeight-Math.max(e,0);t>200&&(this.style.height=`${t}px`)}))}willUpdate(e){e.has("hass")&&this.hass&&!this._infoRequested&&(this._infoRequested=!0,this._loadInfo())}updated(e){(e.has("_theme")||e.has("hass"))&&this._applyMode()}async _loadInfo(){try{this._info=await this.hass.callWS({type:"ksh_family_hub/get_info"}),this._error=null,this._available(this._route)||this._setRoute("home")}catch(e){this._error=e?.message||"unknown_error"}}async _setModules(e){await this.hass.callWS({type:"ksh_family_hub/set_modules",...e});const t=e;for(let e=0;e<20;e++){await new Promise(e=>setTimeout(e,1e3));try{const e=await this.hass.callWS({type:"ksh_family_hub/get_info"});if(Object.entries(t).every(([t,i])=>!!e.modules?.[t]===i))return this._info=e,this._gen+=1,this._visited=new Set,void(this._available(this._route)||this._setRoute("home"))}catch{}}await this._loadInfo()}_available(e){const t=v(e);return!!t&&(!t.module||!!this._info?.modules?.[t.module])}_setRoute(e){if("settings"===e)return this._route="settings",void(this._moreOpen=!1);this._route=e,this._moreOpen=!1,"home"!==e&&this._visited.add(e),Ia.set(ka,e)}_onNavigate(e){this._setRoute(e.detail.id)}_setTheme(e){this._theme=e,Ia.set(Ca,e)}get _dark(){if("light"===this._theme)return!1;if("dark"===this._theme)return!0;const e=this.hass?.themes?.darkMode;return"boolean"==typeof e?e:window.matchMedia?.("(prefers-color-scheme: dark)").matches??!0}_applyMode(){this.setAttribute("data-mode",this._dark?"dark":"light")}_tabSelect(e){const t=this.renderRoot.querySelector(`#mod-${this._route}`);this._subView={...this._subView,[this._route]:e},t&&("shopping"===this._route?t.currentView=e:"meals"===this._route&&t.setHubView(e))}_onModuleView(e,t){this._subView={...this._subView,[e]:t.detail.view}}render(){if(this._error)return this._renderError();if(!this._info)return r`<div class="center"><div class="spinner"></div></div>`;const t=b(this._info.modules);return r`
+  `;setConfig(e){this.config=e;const t=this._hashConfig(e);t!==this._baseCardId&&(this._baseCardId=t,this._assignedCardId=null,this._cardId=t)}getCardSize(){return 12}}customElements.define("ksh-shopping-module",xa);const ka="ksh_hub_route",Ca="ksh_hub_theme",Sa={shopping:"ksh-shopping-module",cards:"ksh-shopping-module",meals:"ksh-recipes-module"},Aa={shopping:"shopping",meals:"grid"},Ea={meals:["detail","add"]},Ia={get(e){try{return localStorage.getItem(e)}catch{return null}},set(e,t){try{localStorage.setItem(e,t)}catch{}}};class Ra extends i{static properties={hass:{type:Object},narrow:{type:Boolean},_config:{state:!0},_info:{state:!0},_error:{state:!0},_route:{state:!0},_rail:{state:!0},_moreOpen:{state:!0},_theme:{state:!0},_subView:{state:!0},_gen:{state:!0},_applying:{state:!0},_applyError:{state:!0}};constructor(){super(),this._config={},this._info=null,this._error=null,this._route=Ia.get(ka)||"home",this._rail=!1,this._moreOpen=!1,this._theme=Ia.get(Ca)||"dark",this._subView={},this._gen=0,this._visited=new Set,["home","settings"].includes(this._route)||this._visited.add("cards"===this._route?"shopping":this._route),this._infoRequested=!1,this._pending=null,this._applying=!1,this._applyError=null,this._isPanel=!1}setConfig(e){this._config=e||{}}getCardSize(){return 10}static getStubConfig(){return{}}connectedCallback(){super.connectedCallback(),this._ro=new ResizeObserver(e=>{const t=e[0]?.contentRect?.width??0;t&&(this._rail=t>=700)}),this._ro.observe(this),this._onKey=e=>{"Escape"===e.key&&this._moreOpen&&(this._moreOpen=!1)},window.addEventListener("keydown",this._onKey),this._onResize=()=>this._updateHeight(),window.addEventListener("resize",this._onResize),window.visualViewport?.addEventListener("resize",this._onResize),this._isPanel="ksh-family-hub-panel"===this.localName,this._updateHeight()}disconnectedCallback(){super.disconnectedCallback(),this._ro?.disconnect(),window.removeEventListener("keydown",this._onKey),window.removeEventListener("resize",this._onResize),window.visualViewport?.removeEventListener("resize",this._onResize)}_updateHeight(){this._isPanel||requestAnimationFrame(()=>requestAnimationFrame(()=>{const e=this.getBoundingClientRect().top,t=window.innerHeight-Math.max(e,0);t>200&&(this.style.height=`${t}px`)}))}willUpdate(e){e.has("hass")&&this.hass&&!this._infoRequested&&(this._infoRequested=!0,this._loadInfo())}updated(e){(e.has("_theme")||e.has("hass"))&&this._applyMode(),(e.has("_route")||e.has("_gen")||e.has("_info"))&&this._syncShoppingView()}_syncShoppingView(){const e=this.renderRoot?.querySelector("#mod-shopping");e&&("cards"===this._route&&"loyalty"!==e.currentView?e.currentView="loyalty":"shopping"===this._route&&"loyalty"===e.currentView&&(e.currentView="shopping"))}async _loadInfo(){try{const e=await this.hass.callWS({type:"ksh_family_hub/get_info"});if(this._pending)return;this._info=e,this._error=null,this._available(this._route)||this._setRoute("home")}catch(e){this._error=e?.message||"unknown_error"}}_applyConfig(e){const t=this._info;let i=t.hidden||[];if(e.items){const t=new Set(i);for(const[i,r]of Object.entries(e.items))r?t.delete(i):t.add(i);i=[...t]}const r={...t,modules:{...t.modules,...e.modules||{}},hidden:i},s=Object.keys(e.modules||{}).some(i=>!!e.modules[i]!=!!t.modules[i]);this._info=r,s&&(this._gen+=1,this._visited=new Set),this._available(this._route)||this._setRoute("home");const n={...e.modules||{}};e.items&&(n.hidden=i),this._pending={...this._pending||{},...n},this._applying||this._flush()}async _flush(){this._applying=!0,this._applyError=null;try{for(;this._pending;){const e=this._pending;this._pending=null;const t=await this.hass.callWS({type:"ksh_family_hub/set_modules",...e});["recipes","shopping"].some(t=>t in e)&&await this._waitForModules(t.modules)}this._pending||await this._loadInfo()}catch(e){this._applyError=e?.message||"Could not save",await this._loadInfo()}this._applying=!1,this.requestUpdate()}async _waitForModules(e){for(let t=0;t<25;t++){await new Promise(e=>setTimeout(e,800));try{const t=await this.hass.callWS({type:"ksh_family_hub/get_info"});if(Object.entries(e).every(([e,i])=>!!t.modules?.[e]==!!i))return}catch{}}}_available(e){return"settings"===e||b(this._info?.modules,this._info?.hidden).some(t=>t.id===e)}_setRoute(e){if("settings"===e)return this._route="settings",void(this._moreOpen=!1);this._route=e,this._moreOpen=!1,"home"!==e&&this._visited.add("cards"===e?"shopping":e),Ia.set(ka,e)}_onNavigate(e){this._setRoute(e.detail.id)}_setTheme(e){this._theme=e,Ia.set(Ca,e)}get _dark(){if("light"===this._theme)return!1;if("dark"===this._theme)return!0;const e=this.hass?.themes?.darkMode;return"boolean"==typeof e?e:window.matchMedia?.("(prefers-color-scheme: dark)").matches??!0}_applyMode(){this.setAttribute("data-mode",this._dark?"dark":"light")}_tabSelect(e){const t=this.renderRoot.querySelector(`#mod-${this._route}`);this._subView={...this._subView,[this._route]:e},t&&("shopping"===this._route?t.currentView=e:"meals"===this._route&&t.setHubView(e))}_onModuleView(e,t){this._subView={...this._subView,[e]:t.detail.view}}render(){if(this._error)return this._renderError();if(!this._info)return r`<div class="center"><div class="spinner"></div></div>`;const t=b(this._info.modules,this._info.hidden);return r`
       <div class="shell ${this._rail?"rail-layout":"bar-layout"}">
         ${this._rail?this._renderRail(t):e}
         <main class="stage">
@@ -15901,19 +15900,19 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       </div>
     `}_renderStage(){const t=this._route,i=Sa[t],s=f[t],n=this._subView[t]||Aa[t],a=s&&!(Ea[t]||[]).includes(n),o=this._dark,c="compact";return r`
       ${"home"===t?r`
-        <ksh-hub-home .hass=${this.hass} .modules=${this._info.modules} .dark=${o} .panel=${this._isPanel}
+        <ksh-hub-home .hass=${this.hass} .modules=${this._info.modules} .hidden=${this._info.hidden} .dark=${o} .panel=${this._isPanel}
           @hub-navigate=${this._onNavigate}
           @hub-open-settings=${()=>this._setRoute("settings")}></ksh-hub-home>`:e}
 
       ${"settings"===t?r`
         <ksh-hub-settings .hass=${this.hass} .info=${this._info} .theme=${this._theme}
-          .cardVersion=${m}
+          .cardVersion=${m} .applying=${this._applying} .applyError=${this._applyError}
           @hub-theme=${e=>this._setTheme(e.detail.theme)}
-          @hub-modules=${e=>this._setModules(e.detail)}
+          @hub-config=${e=>this._applyConfig(e.detail)}
           @hub-back=${()=>this._setRoute("home")}></ksh-hub-settings>`:e}
 
       ${i||"home"===t||"settings"===t?e:r`
-        <ksh-hub-placeholder .item=${v(t)}
+        <ksh-hub-placeholder .item=${l=t,g.find(e=>e.id===l)}
           @hub-navigate=${this._onNavigate}></ksh-hub-placeholder>`}
 
       ${a?r`
@@ -15926,7 +15925,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
       ${p(this._gen,r`
         ${this._visited.has("shopping")&&this._info.modules.shopping?r`
-          <div class="module" ?hidden=${"shopping"!==t}>
+          <div class="module" ?hidden=${"shopping"!==t&&"cards"!==t}>
             <ksh-shopping-module id="mod-shopping" hub-mode
               .hass=${this.hass} .hostUi=${c} .hostDark=${o}
               @module-view-changed=${e=>this._onModuleView("shopping",e)}></ksh-shopping-module>
@@ -15938,10 +15937,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
               @module-view-changed=${e=>this._onModuleView("meals",e)}></ksh-recipes-module>
           </div>`:e}
       `)}
-    `}_tile(t,{active:i=!1,size:s=""}={}){return r`
-      <span class="tile ${i?"active":""} ${s}" style="--c:${t.color}">
-        <ha-icon icon=${t.icon}></ha-icon>
-        ${t.locked?r`<span class="lock"><ha-icon icon="mdi:lock-outline"></ha-icon></span>`:e}
+    `;var l}_tile(e,{active:t=!1,size:i=""}={}){return r`
+      <span class="tile ${t?"active":""} ${i}" style="--c:${e.color}">
+        <ha-icon icon=${e.icon}></ha-icon>
       </span>`}_renderBar(e){const t=e.filter(e=>e.primary),i=!t.some(e=>e.id===this._route)&&"settings"!==this._route;return r`
       <nav class="bar" aria-label="Main">
         ${t.map(e=>r`
@@ -15976,7 +15974,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
               <span class="label">${e.label}</span>
             </button>`)}
         </div>
-      </section>`}_sheetDown=e=>{e.target.closest(".grid-item")&&"mouse"===e.pointerType||(this._drag={y:e.clientY,dy:0,el:e.currentTarget})};_sheetMove=e=>{if(!this._drag)return;const t=Math.max(0,e.clientY-this._drag.y);this._drag.dy=t,t>6&&(this._drag.el.style.transform=`translateY(${t}px)`)};_sheetUp=()=>{if(!this._drag)return;const{dy:e,el:t}=this._drag;this._drag=null,t.style.transform="",e>90&&(this._moreOpen=!1)};static styles=[y,t`
+      </section>`}_sheetDown=e=>{e.target.closest(".grid-item")&&"mouse"===e.pointerType||(this._drag={y:e.clientY,dy:0,el:e.currentTarget})};_sheetMove=e=>{if(!this._drag)return;const t=Math.max(0,e.clientY-this._drag.y);this._drag.dy=t,t>6&&(this._drag.el.style.transform=`translateY(${t}px)`)};_sheetUp=()=>{if(!this._drag)return;const{dy:e,el:t}=this._drag;this._drag=null,t.style.transform="",e>90&&(this._moreOpen=!1)};static styles=[v,t`
     :host {
       display: block;
       height: 100%;
@@ -16029,11 +16027,6 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     .tile.more { background: rgba(160, 178, 197, 0.16); color: var(--hub-muted); }
     :host([data-mode="light"]) .tile.more { background: rgba(60, 80, 100, 0.1); }
     .tile.more.active { background: var(--hub-accent); color: var(--hub-accent-ink); }
-    .lock {
-      position: absolute; top: -5px; right: -5px; width: 20px; height: 20px; border-radius: 50%;
-      background: var(--hub-sheet); border: 1px solid var(--hub-border); color: var(--hub-muted);
-      display: flex; align-items: center; justify-content: center; --mdc-icon-size: 12px;
-    }
     .label { font-size: 12px; font-weight: 600; color: var(--hub-muted); line-height: 1.15; }
 
     /* ---- bottom bar (phone) ---- */

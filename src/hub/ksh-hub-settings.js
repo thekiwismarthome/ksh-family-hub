@@ -1,5 +1,12 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { hubTokens } from './hub-styles.js';
+import { ITEMS } from './modules.js';
+
+const DESCRIPTIONS = {
+  shopping: 'Lists, product catalogue and supermarkets',
+  meals: 'Recipe book, meal planner and cooking timers',
+  cards: 'Loyalty cards (needs Shopping)',
+};
 
 class KshHubSettings extends LitElement {
   static properties = {
@@ -7,13 +14,13 @@ class KshHubSettings extends LitElement {
     info: { type: Object },
     theme: { type: String },
     cardVersion: { type: String },
-    _busy: { state: true },
+    applying: { type: Boolean },
+    applyError: { type: String },
     _error: { state: true },
   };
 
   constructor() {
     super();
-    this._busy = false;
     this._error = null;
   }
 
@@ -23,51 +30,62 @@ class KshHubSettings extends LitElement {
     this.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
   }
 
-  async _toggle(key, value) {
-    const modules = this.info?.modules || {};
-    const others = Object.entries(modules).filter(([k]) => k !== key);
-    if (!value && others.every(([, v]) => !v)) {
-      this._error = 'Keep at least one part switched on.';
-      return;
-    }
-    this._error = null;
-    this._busy = true;
-    this._emit('hub-modules', { [key]: value });
-    // _busy clears when the card swaps in the new `info` once the integration is back
-    setTimeout(() => { this._busy = false; }, 30000);
+  _isOn(item) {
+    const hidden = this.info?.hidden || [];
+    if (item.module && !this.info?.modules?.[item.module]) return false;
+    // Shopping and Meals are the parts themselves; everything else is a menu entry
+    return item.id === 'shopping' || item.id === 'meals' ? true : !hidden.includes(item.id);
   }
 
-  updated(changed) {
-    if (changed.has('info')) this._busy = false;
+  _toggle(item, value) {
+    this._error = null;
+    const modules = this.info?.modules || {};
+    // Shopping and Meals switch a whole part of the integration on or off
+    if (item.id === 'shopping' || item.id === 'meals') {
+      const key = item.module;
+      const others = Object.entries(modules).filter(([k]) => k !== key);
+      if (!value && others.every(([, v]) => !v)) {
+        this._error = 'Keep at least one of Shopping and Meals switched on.';
+        return;
+      }
+      this._emit('hub-config', { modules: { [key]: value } });
+      return;
+    }
+    this._emit('hub-config', { items: { [item.id]: value } });
   }
 
   render() {
-    const m = this.info?.modules || {};
     const admin = this._isAdmin;
-    const row = (key, label, desc, icon, color) => html`
-      <div class="row" style="--c:${color}">
-        <span class="dot"><ha-icon icon=${icon}></ha-icon></span>
-        <div class="txt"><div class="name">${label}</div><div class="desc">${desc}</div></div>
-        <button class="switch ${m[key] ? 'on' : ''}" role="switch" aria-checked=${m[key] ? 'true' : 'false'}
-          aria-label=${label} ?disabled=${!admin || this._busy}
-          @click=${() => this._toggle(key, !m[key])}><i></i></button>
-      </div>`;
+    const row = item => {
+      const partOff = item.module && !this.info?.modules?.[item.module] && item.id !== 'shopping' && item.id !== 'meals';
+      const on = this._isOn(item);
+      return html`
+        <div class="row" style="--c:${item.color}">
+          <span class="dot"><ha-icon icon=${item.icon}></ha-icon></span>
+          <div class="txt">
+            <div class="name">${item.label}</div>
+            <div class="desc">${DESCRIPTIONS[item.id] || 'Coming soon'}</div>
+          </div>
+          <button class="switch ${on ? 'on' : ''}" role="switch" aria-checked=${on ? 'true' : 'false'}
+            aria-label=${item.label} ?disabled=${!admin || partOff}
+            @click=${() => this._toggle(item, !on)}><i></i></button>
+        </div>`;
+    };
+    const items = ITEMS.filter(i => !i.home);
     return html`
       <div class="page">
         <header>
           <button class="back" @click=${() => this._emit('hub-back')} aria-label="Back"><ha-icon icon="mdi:arrow-left"></ha-icon></button>
           <h1>Hub settings</h1>
+          ${this.applying ? html`<span class="spin" title="Saving"></span>` : nothing}
         </header>
 
         <h3>Parts of the hub</h3>
-        <section class="card">
-          ${row('shopping', 'Shopping Lists', 'Lists, product catalogue, loyalty cards and supermarkets', 'mdi:cart-outline', '#2fb585')}
-          ${row('recipes', 'Recipes & Meal Planner', 'Recipe book, meal planner and cooking timers', 'mdi:silverware-fork-knife', '#f0903f')}
-        </section>
+        <section class="card">${items.map(row)}</section>
         ${!admin ? html`<p class="note">Only a Home Assistant administrator can switch parts on or off.</p>` : nothing}
-        ${this._busy ? html`<p class="note">Applying…</p>` : nothing}
-        ${this._error ? html`<p class="note err">${this._error}</p>` : nothing}
-        <p class="note">Switching a part off only hides it. Its data stays where it is.</p>
+        ${this._error || this.applyError ? html`<p class="note err">${this._error || this.applyError}</p>` : nothing}
+        <p class="note">Shopping and Meals load or unload that part of the integration (this takes a few seconds in the background).
+          The other entries only show or hide their menu item. Nothing is ever deleted: switching a part back on restores everything.</p>
 
         <h3>Appearance</h3>
         <section class="card">
@@ -82,6 +100,8 @@ class KshHubSettings extends LitElement {
         <section class="card about">
           <div><span>Integration</span><b>${this.info?.version ?? '—'}</b></div>
           <div><span>Card</span><b>${this.cardVersion ?? '—'}</b></div>
+          ${Object.entries(this.info?.imported || {}).map(([part, files]) => html`
+            <div><span>Imported ${part === 'recipes' ? 'recipes' : 'shopping'} data</span><b>${files.length ? `${files.length} file${files.length === 1 ? '' : 's'}` : 'none found'}</b></div>`)}
         </section>
         <p class="note">On first start the hub copies your existing Recipe Manager and Shopping List Manager data.
           The originals are left untouched, so the standalone integrations keep working side by side.</p>
@@ -118,6 +138,8 @@ class KshHubSettings extends LitElement {
     .switch.on { background: var(--hub-accent); }
     .switch.on i { transform: translateX(20px); }
     .switch:disabled { opacity: .5; cursor: default; }
+    .spin { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--hub-border); border-top-color: var(--hub-accent); animation: spin .8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
     .note { margin: 8px 4px 0; font-size: 12.5px; color: var(--hub-muted); }
     .note.err { color: #f0a050; }
     .seg { display: flex; gap: 6px; padding: 8px; }

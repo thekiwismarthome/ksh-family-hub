@@ -14,19 +14,19 @@ Recipes, meal planning and shopping lists for Home Assistant, in **one** integra
 | Menu entry | Status |
 | --- | --- |
 | **Home** | Today's meals, open shopping items, shortcuts, hub settings |
-| **Shopping** | Everything Shopping List Manager does: lists, catalogue, loyalty cards, supermarkets, households |
+| **Shopping** | Shopping List Manager: lists, catalogue, supermarkets, households |
+| **Cards** | Loyalty cards (part of Shopping) |
 | **Meals** | Everything Recipe Manager does: recipes, importers, meal planner, timers |
-| Wishlist, Chores, Finances, Medicine, Reminders, Birthdays, Expiry, Cards, Routines | Placeholders for what comes next |
-| Timetables, Chat, Location | Placeholders, shown locked |
+| Wishlist, Chores, Finances, Medicine, Reminders, Birthdays, Expiry, Routines, Timetables, Chat, Location | Placeholders for what comes next |
 
 **Phone:** a floating bottom bar (Home, Shopping, Meals, Wishlist, More) and a *More* sheet with every section.
 **Tablet / desktop (≥ 700 px wide):** a slim icon rail down the left with every section.
 
 ### Switch parts on and off
 
-Don't want shopping, or don't want recipes? Turn either off in **Home → ⚙ Hub settings → Parts of the hub**
-(administrators only) or from the integration's **Configure** button. A switched-off part disappears from the
-menus and its backend is not loaded. Its data is left alone, so switching it back on restores everything.
+Every menu entry has a switch in **Home → ⚙ Hub settings → Parts of the hub** (administrators only). Shopping and
+Meals load or unload that part of the integration; the other entries just show or hide their menu item. The
+integration's **Configure** button has the Shopping/Meals switches too. Its data is left alone, so switching it back on restores everything.
 At least one part has to stay on.
 
 ## Install (HACS)
@@ -44,7 +44,7 @@ There is nothing to add under Dashboard resources; the integration serves and lo
 
 ### Already using Recipe Manager / Shopping List Manager?
 
-The first time each part starts, KSH Family Hub **copies** your existing data from
+The first time each part starts, KSH Family Hub **imports** your existing data from
 `.storage/recipe_manager.*` and `.storage/shopping_list_manager.*`. The originals are not touched, images keep
 their paths under `www/images/`, and you can run the standalone integrations next to the hub while testing.
 Changes made in one do not appear in the other after the copy.

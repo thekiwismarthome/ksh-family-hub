@@ -13,3 +13,6 @@ MODULE_OPTIONS = {
 DEFAULT_COUNTRY = "NZ"
 
 CARD_FILENAME = "ksh-family-hub-card.js"
+
+# Menu entries (other than Home) that an administrator has switched off in the hub settings
+OPTION_HIDDEN_ITEMS = "items_off"

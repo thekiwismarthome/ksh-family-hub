@@ -11,9 +11,7 @@ class KshHubPlaceholder extends LitElement {
       <div class="wrap" style="--c:${i.color}">
         <span class="tile"><ha-icon icon=${i.icon}></ha-icon></span>
         <h2>${i.label}</h2>
-        <p>${i.locked
-          ? 'This part of the hub is locked for now. It will unlock in a future release.'
-          : 'This part of the hub is coming soon.'}</p>
+        <p>This part of the hub is coming soon.</p>
         <button @click=${() => this.dispatchEvent(new CustomEvent('hub-navigate', { detail: { id: 'home' }, bubbles: true, composed: true }))}>
           Back to Home
         </button>

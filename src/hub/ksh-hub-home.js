@@ -14,6 +14,7 @@ class KshHubHome extends LitElement {
   static properties = {
     hass: { type: Object },
     modules: { type: Object },
+    hidden: { type: Array },
     dark: { type: Boolean },
     panel: { type: Boolean },     // running as a Home Assistant sidebar panel
     _shopping: { state: true },   // { list, open } | null
@@ -79,7 +80,7 @@ class KshHubHome extends LitElement {
     const today = new Date().toLocaleDateString(this.hass?.locale?.language || undefined, {
       weekday: 'long', day: 'numeric', month: 'long',
     });
-    const items = visibleItems(this.modules).filter(i => !i.home);
+    const items = visibleItems(this.modules, this.hidden).filter(i => !i.home);
     return html`
       <div class="page">
         <header>
@@ -114,7 +115,6 @@ class KshHubHome extends LitElement {
             <button class="grid-item" @click=${() => this._go(i.id)}>
               <span class="tile" style="--c:${i.color}">
                 <ha-icon icon=${i.icon}></ha-icon>
-                ${i.locked ? html`<span class="lock"><ha-icon icon="mdi:lock-outline"></ha-icon></span>` : nothing}
               </span>
               <span class="label">${i.label}</span>
             </button>`)}
@@ -196,11 +196,6 @@ class KshHubHome extends LitElement {
     .tile {
       position: relative; width: 54px; height: 54px; border-radius: 17px; display: inline-flex; align-items: center; justify-content: center;
       background: color-mix(in srgb, var(--c) 20%, transparent); color: var(--c); --mdc-icon-size: 28px;
-    }
-    .lock {
-      position: absolute; top: -5px; right: -5px; width: 20px; height: 20px; border-radius: 50%; --mdc-icon-size: 12px;
-      background: var(--hub-sheet); border: 1px solid var(--hub-border); color: var(--hub-muted);
-      display: flex; align-items: center; justify-content: center;
     }
     .label { font-size: 12.5px; font-weight: 700; }
   `];
