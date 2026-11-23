@@ -2,6 +2,9 @@
 
 Recipes, meal planning and shopping lists for Home Assistant, in **one** integration and **one** app.
 
+[![Open your Home Assistant instance and open the KSH Family Hub repository in the Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=thekiwismarthome&repository=ksh-family-hub&category=integration)
+[![Open your Home Assistant instance and start setting up KSH Family Hub.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=ksh_family_hub)
+
 > **Beta.** This is the first combined build of [Recipe Manager](https://github.com/thekiwismarthome/Recipe-Manager)
 > and [Shopping List Manager](https://github.com/thekiwismarthome/shopping-list-manager). It is the base for a larger
 > family hub, so expect rough edges and a lot of "coming soon" tiles.
@@ -27,6 +30,8 @@ menus and its backend is not loaded. Its data is left alone, so switching it bac
 At least one part has to stay on.
 
 ## Install (HACS)
+
+The quickest way: press the first button at the top of this page, download **KSH Family Hub**, restart Home Assistant, then press the second button to set it up. Or by hand:
 
 1. HACS → ⋮ → **Custom repositories** → add `https://github.com/thekiwismarthome/ksh-family-hub`, type **Integration**.
 2. Download **KSH Family Hub**. Because this is a beta, enable *Show beta versions* if HACS does not offer it.
