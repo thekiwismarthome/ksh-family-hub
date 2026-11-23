@@ -1,5 +1,5 @@
 import { LitElement, html, css, nothing } from 'lit';
-import { hubTokens } from './hub-styles.js';
+import { PALETTES } from './hub-styles.js';
 import { ITEMS } from './modules.js';
 
 const DESCRIPTIONS = {
@@ -13,6 +13,7 @@ class KshHubSettings extends LitElement {
     hass: { type: Object },
     info: { type: Object },
     theme: { type: String },
+    palette: { type: String },
     cardVersion: { type: String },
     applying: { type: Boolean },
     applyError: { type: String },
@@ -76,7 +77,7 @@ class KshHubSettings extends LitElement {
       <div class="page">
         <header>
           <button class="back" @click=${() => this._emit('hub-back')} aria-label="Back"><ha-icon icon="mdi:arrow-left"></ha-icon></button>
-          <h1>Hub settings</h1>
+          <h1>Settings</h1>
           ${this.applying ? html`<span class="spin" title="Saving"></span>` : nothing}
         </header>
 
@@ -95,6 +96,16 @@ class KshHubSettings extends LitElement {
                 class=${this.theme === val ? 'sel' : ''} @click=${() => this._emit('hub-theme', { theme: val })}>${label}</button>`)}
           </div>
         </section>
+        <h3>Theme</h3>
+        <section class="card themes" role="radiogroup" aria-label="Theme">
+          ${PALETTES.map(p => html`
+            <button role="radio" aria-checked=${this.palette === p.id ? 'true' : 'false'} class="theme ${this.palette === p.id ? 'sel' : ''}"
+              @click=${() => this._emit('hub-palette', { palette: p.id })}>
+              <span class="sw" style="background:linear-gradient(135deg, ${p.swatch[0]} 0 55%, ${p.swatch[1]} 55% 100%)"></span>
+              <span>${p.label}</span>
+            </button>`)}
+        </section>
+        <p class="note">More themes will be added here later.</p>
 
         <h3>About</h3>
         <section class="card about">
@@ -108,7 +119,12 @@ class KshHubSettings extends LitElement {
       </div>`;
   }
 
-  static styles = [hubTokens, css`
+  static styles = [css`
+    .themes { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; padding: 12px; }
+    .theme { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 12px 8px; border-radius: 16px; cursor: pointer;
+      border: 2px solid var(--hub-border); background: var(--hub-surface-2); font: inherit; font-weight: 700; color: var(--hub-text); }
+    .theme.sel { border-color: var(--hub-accent); }
+    .theme .sw { width: 56px; height: 56px; border-radius: 16px; border: 1px solid var(--hub-border); }
     :host { display: block; flex: 1; min-height: 0; overflow-y: auto; }
     * { box-sizing: border-box; }
     button { font: inherit; color: inherit; }

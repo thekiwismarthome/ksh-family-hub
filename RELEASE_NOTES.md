@@ -1,5 +1,17 @@
 # Release notes
 
+## Unreleased
+
+- **New top bar** on every page: KSH logo, then the household name on Home (the page name everywhere else).
+  The logo is no longer in the menu list.
+- **Households** (backend `ksh_family_hub/households/*`): the first is created from your Home Assistant name and is open
+  to everyone with a login. Create more from the menu, then invite people (anyone with a Home Assistant login and a Person).
+- **Menu (top right):** household switcher, Invite member, Settings, Change Region/Language.
+- **Quick add** (+ left of the menu): Shopping List (adds to the active list) and Recipes (opens a new recipe).
+  Reminders, Chores and Birthdays are listed and marked Soon.
+- **Themes:** Settings > Theme: Midnight, Slate, Forest, Dusk (dark and light).
+- The Shopping and Meals Settings sub-tabs are back; the gear moved into the menu as global Settings.
+
 ## 0.1.0-beta.3
 
 - **KSH logo** at the top left: top of the icon rail on tablets, top left of the new top bar on phones. Tap it for Home.

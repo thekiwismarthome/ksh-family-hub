@@ -1,5 +1,4 @@
 import { LitElement, html, css } from 'lit';
-import { hubTokens } from './hub-styles.js';
 
 class KshHubPlaceholder extends LitElement {
   static properties = { item: { type: Object } };
@@ -18,7 +17,7 @@ class KshHubPlaceholder extends LitElement {
       </div>`;
   }
 
-  static styles = [hubTokens, css`
+  static styles = [css`
     :host { display: flex; flex: 1; min-height: 0; align-items: center; justify-content: center; }
     .wrap { text-align: center; padding: 24px; max-width: 360px; display: grid; gap: 10px; justify-items: center; }
     .tile {

@@ -1,5 +1,4 @@
 import { LitElement, html, css, nothing } from 'lit';
-import { hubTokens } from './hub-styles.js';
 import { ITEMS, visibleItems } from './modules.js';
 
 const MEAL_ORDER = ['breakfast', 'lunch', 'dinner', 'snack', 'dessert'];
@@ -144,7 +143,7 @@ class KshHubHome extends LitElement {
       </section>`;
   }
 
-  static styles = [hubTokens, css`
+  static styles = [css`
     :host { display: block; flex: 1; min-height: 0; overflow-y: auto; }
     * { box-sizing: border-box; }
     button { font: inherit; color: inherit; }

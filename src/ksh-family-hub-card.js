@@ -6,11 +6,14 @@ import { hubTokens } from './hub/hub-styles.js';
 import './hub/ksh-hub-home.js';
 import './hub/ksh-hub-settings.js';
 import './hub/ksh-hub-placeholder.js';
+import './hub/ksh-hub-sheets.js';
 import './modules/recipes/recipe-manager-card.js';    // <ksh-recipes-module>
 import './modules/shopping/shopping-list-manager-card.js'; // <ksh-shopping-module>
 
 const ROUTE_KEY = 'ksh_hub_route';
 const THEME_KEY = 'ksh_hub_theme';
+const PALETTE_KEY = 'ksh_hub_palette';
+const HOUSEHOLD_KEY = 'ksh_hub_household';
 const RAIL_MIN_WIDTH = 700;
 const LOGO_URL = `/ksh_family_hub/static/ksh-logo.png?v=${CARD_VERSION}`;
 
@@ -36,6 +39,11 @@ export class KshFamilyHubCard extends LitElement {
     _rail: { state: true },
     _moreOpen: { state: true },
     _theme: { state: true },
+    _palette: { state: true },
+    _households: { state: true },
+    _householdId: { state: true },
+    _sheet: { state: true },
+    _language: { state: true },
     _subView: { state: true },
     _gen: { state: true },
     _applying: { state: true },
@@ -51,6 +59,11 @@ export class KshFamilyHubCard extends LitElement {
     this._rail = false;
     this._moreOpen = false;
     this._theme = store.get(THEME_KEY) || 'dark';
+    this._palette = store.get(PALETTE_KEY) || 'midnight';
+    this._households = [];
+    this._householdId = null;
+    this._sheet = null;
+    this._language = this._readLanguage();
     this._subView = {};
     this._gen = 0;
     this._visited = new Set();
@@ -68,6 +81,7 @@ export class KshFamilyHubCard extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
+    this.setAttribute('data-theme', this._palette);
     this._ro = new ResizeObserver(entries => {
       const w = entries[0]?.contentRect?.width ?? 0;
       if (w) this._rail = w >= RAIL_MIN_WIDTH;
@@ -104,11 +118,13 @@ export class KshFamilyHubCard extends LitElement {
     if (changed.has('hass') && this.hass && !this._infoRequested) {
       this._infoRequested = true;
       this._loadInfo();
+      this._loadHouseholds();
     }
   }
 
   updated(changed) {
     if (changed.has('_theme') || changed.has('hass')) this._applyMode();
+    if (changed.has('_palette')) this.setAttribute('data-theme', this._palette);
     if (changed.has('_route') || changed.has('_gen') || changed.has('_info')) this._syncShoppingView();
   }
 
@@ -228,49 +244,78 @@ export class KshFamilyHubCard extends LitElement {
     else if (this._route === 'meals') el.setHubView(view);
   }
 
-  // The gear on every page: that page's own settings (Shopping, Meals) or the hub settings
-  _openSettings() {
-    const route = this._route;
-    if (route === 'shopping' || route === 'cards') {
-      if (route === 'cards') this._setRoute('shopping');
-      const el = this.renderRoot.querySelector('#mod-shopping');
-      this._subView = { ...this._subView, shopping: 'settings' };
-      if (el) el.currentView = 'settings';
-    } else if (route === 'meals') {
-      this._subView = { ...this._subView, meals: 'settings' };
-      this.renderRoot.querySelector('#mod-meals')?.setHubView('settings');
-    } else {
-      this._setRoute('settings');
+  // ---- households -----------------------------------------------------------
+
+  async _loadHouseholds(select) {
+    try {
+      const { households } = await this.hass.callWS({ type: 'ksh_family_hub/households/list' });
+      this._households = households;
+      const key = `${HOUSEHOLD_KEY}_${this.hass.user?.id || ''}`;
+      const want = select || this._householdId || store.get(key);
+      this._householdId = (households.find(h => h.id === want) || households[0])?.id || null;
+      if (this._householdId) store.set(key, this._householdId);
+    } catch { /* the hub still works without households */ }
+  }
+
+  get _household() { return this._households.find(h => h.id === this._householdId) || this._households[0]; }
+
+  _selectHousehold(id) {
+    this._householdId = id;
+    store.set(`${HOUSEHOLD_KEY}_${this.hass.user?.id || ''}`, id);
+  }
+
+  // ---- sheets ----------------------------------------------------------------
+
+  _readLanguage() {
+    try { return JSON.parse(localStorage.getItem('rm_settings') || '{}').language || 'en'; } catch { return 'en'; }
+  }
+
+  async _setLanguage(code) {
+    this._language = code;
+    if (!this._info?.modules?.recipes) {
+      try { localStorage.setItem('rm_settings', JSON.stringify({ ...JSON.parse(localStorage.getItem('rm_settings') || '{}'), language: code })); } catch { /* ignore */ }
+      return;
+    }
+    this._visited.add('meals');
+    this.requestUpdate();
+    await this.updateComplete;
+    this.renderRoot.querySelector('#mod-meals')?.setLanguage?.(code);
+  }
+
+  // Quick add > Recipes: open the new-recipe form
+  async _quickRecipe() {
+    this._sheet = null;
+    this._setRoute('meals');
+    for (let i = 0; i < 20; i++) {
+      await this.updateComplete;
+      const el = this.renderRoot.querySelector('#mod-meals');
+      if (el?.setHubView) { el.setHubView('add'); this._subView = { ...this._subView, meals: 'add' }; return; }
+      await new Promise(r => setTimeout(r, 100));
     }
   }
 
   _topbar() {
     const route = this._route;
-    const sub = this._subView[route] || MODULE_DEFAULT_VIEW[route];
-    const own = MODULE_ELEMENT[route];
-    const active = route === 'settings' || (own && sub === 'settings');
-    const title = route === 'home' ? '' : route === 'settings' ? 'Hub settings' : (itemById(route)?.label || '');
+    const home = route === 'home';
+    const title = home ? (this._household?.name || 'Home') : route === 'settings' ? 'Settings' : (itemById(route)?.label || '');
     return html`
       <header class="topbar">
-        ${this._isPanel ? html`
-          <button class="icon-btn" title="Menu" aria-label="Open the Home Assistant sidebar"
-            @click=${() => this.dispatchEvent(new CustomEvent('hass-toggle-menu', { bubbles: true, composed: true }))}>
-            <ha-icon icon="mdi:menu"></ha-icon>
-          </button>` : nothing}
-        ${!this._rail ? this._logo() : nothing}
-        <h1 class="page-title">${title}</h1>
-        <button class="icon-btn ${active ? 'active' : ''}" title="Settings" aria-label="Settings"
-          @click=${() => this._openSettings()}>
-          <ha-icon icon="mdi:cog-outline"></ha-icon>
+        <button class="logo" title="KSH Family Hub" aria-label="KSH Family Hub, go to Home" @click=${() => this._setRoute('home')}>
+          <img src=${LOGO_URL} alt="KSH" draggable="false">
+        </button>
+        ${home ? html`
+          <button class="who" @click=${() => { this._sheet = 'menu'; }} aria-label="Household: ${title}">
+            <span class="page-title">${title}</span>
+            <span class="sub">Household</span>
+          </button>` : html`<h1 class="page-title">${title}</h1>`}
+        <span class="spacer"></span>
+        <button class="icon-btn" title="Quick add" aria-label="Quick add" @click=${() => { this._sheet = 'quick'; }}>
+          <ha-icon icon="mdi:plus"></ha-icon>
+        </button>
+        <button class="icon-btn" title="Menu" aria-label="Menu" aria-haspopup="dialog" @click=${() => { this._sheet = 'menu'; }}>
+          <ha-icon icon="mdi:menu"></ha-icon>
         </button>
       </header>`;
-  }
-
-  _logo() {
-    return html`
-      <button class="logo" title="KSH Family Hub" aria-label="KSH Family Hub, go to Home" @click=${() => this._setRoute('home')}>
-        <img src=${LOGO_URL} alt="KSH" draggable="false">
-      </button>`;
   }
 
   _onModuleView(id, e) {
@@ -294,6 +339,17 @@ export class KshFamilyHubCard extends LitElement {
         ${!this._rail ? this._renderBar(items) : nothing}
       </div>
       ${this._moreOpen ? this._renderMore(items) : nothing}
+      <ksh-hub-sheets .hass=${this.hass} .sheet=${this._sheet} .households=${this._households} .activeId=${this._householdId}
+        .modules=${this._info.modules} .hidden=${this._info.hidden} .panel=${this._isPanel} .language=${this._language}
+        @hub-close=${() => { this._sheet = null; }}
+        @hub-sheet=${e => { this._sheet = e.detail.sheet; }}
+        @hub-household-select=${e => this._selectHousehold(e.detail.id)}
+        @hub-households-changed=${e => this._loadHouseholds(e.detail.select)}
+        @hub-open-settings=${() => { this._sheet = null; this._setRoute('settings'); }}
+        @hub-set-language=${e => this._setLanguage(e.detail.code)}
+        @hub-quick=${e => { if (e.detail.id === 'meals') this._quickRecipe(); }}
+        @hub-region-changed=${() => { this._gen++; }}
+        @hass-toggle-menu=${() => { this._sheet = null; }}></ksh-hub-sheets>
     `;
   }
 
@@ -328,9 +384,10 @@ export class KshFamilyHubCard extends LitElement {
           @hub-open-settings=${() => this._setRoute('settings')}></ksh-hub-home>` : nothing}
 
       ${route === 'settings' ? html`
-        <ksh-hub-settings .hass=${this.hass} .info=${this._info} .theme=${this._theme}
+        <ksh-hub-settings .hass=${this.hass} .info=${this._info} .theme=${this._theme} .palette=${this._palette}
           .cardVersion=${CARD_VERSION} .applying=${this._applying} .applyError=${this._applyError}
           @hub-theme=${e => this._setTheme(e.detail.theme)}
+          @hub-palette=${e => { this._palette = e.detail.palette; store.set(PALETTE_KEY, this._palette); }}
           @hub-config=${e => this._applyConfig(e.detail)}
           @hub-back=${() => this._setRoute('home')}></ksh-hub-settings>` : nothing}
 
@@ -392,7 +449,6 @@ export class KshFamilyHubCard extends LitElement {
   _renderRail(items) {
     return html`
       <nav class="rail" aria-label="Main">
-        ${this._logo()}
         ${items.map(i => html`
           <button class="rail-item ${this._route === i.id ? 'active' : ''}" title=${i.label}
             @click=${() => this._setRoute(i.id)} aria-label=${i.label}
@@ -465,8 +521,14 @@ export class KshFamilyHubCard extends LitElement {
 
     /* ---- top bar: logo (phone), page title, settings gear ---- */
     .topbar { flex: none; display: flex; align-items: center; gap: 10px; padding: 10px 14px 2px; min-height: 62px; }
-    .page-title { flex: 1; min-width: 0; margin: 0; font-size: 20px; font-weight: 800; letter-spacing: -0.01em;
+    .page-title { min-width: 0; margin: 0; font-size: 20px; font-weight: 800; letter-spacing: -0.01em;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--hub-text); }
+    .spacer { flex: 1; }
+    .who { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; background: none; border: none;
+      padding: 2px 6px; margin-left: -6px; cursor: pointer; border-radius: 10px; text-align: left; }
+    .who:hover { background: var(--hub-surface-2); }
+    .who .page-title { max-width: 100%; }
+    .who .sub { font-size: 11.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--hub-muted); }
     .icon-btn {
       flex: none; width: 42px; height: 42px; border-radius: 50%; border: 1px solid var(--hub-border); cursor: pointer;
       background: var(--hub-surface); color: var(--hub-muted); display: flex; align-items: center; justify-content: center;
@@ -476,7 +538,6 @@ export class KshFamilyHubCard extends LitElement {
     .icon-btn.active { background: var(--hub-accent); color: var(--hub-accent-ink); border-color: transparent; }
     .logo { flex: none; width: 50px; height: 50px; padding: 0; border: none; background: none; cursor: pointer; border-radius: 15px; line-height: 0; }
     .logo img { width: 100%; height: 100%; display: block; border-radius: 15px; }
-    .rail .logo { margin: 0 0 8px; }
 
     /* ---- sub tabs ---- */
     .subtabs {

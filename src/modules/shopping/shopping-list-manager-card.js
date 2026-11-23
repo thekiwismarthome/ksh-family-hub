@@ -1480,13 +1480,13 @@ class ShoppingListManagerCard extends LitElement {
     :host([data-hub][data-ui="compact"]) .content-area { padding-bottom: 8px; }
     /* hub palette: navy surfaces and the Shopping accent */
     :host([data-hub][data-ui][data-mode="dark"]) {
-      --slm-bg-main: #111f2f; --slm-bg-surface: #162b41; --slm-bg-elevated: #1c354e; --slm-tile-bg: #162b41;
+      --slm-bg-main: var(--hub-m-main, #111f2f); --slm-bg-surface: var(--hub-surface, #162b41); --slm-bg-elevated: var(--hub-surface-2, #1c354e); --slm-tile-bg: var(--hub-surface, #162b41);
       --slm-border-subtle: rgba(255,255,255,0.09); --slm-line-soft: rgba(255,255,255,0.06);
       --slm-accent-primary: #4fd1a1; --slm-accent-soft: rgba(79,209,161,0.18); --slm-accent-text: #8fe8c6;
       --slm-accent-ink: #06261d; --slm-on-cat: #06261d; --slm-total-bar-bg: #4fd1a1;
     }
     :host([data-hub][data-ui][data-mode="light"]) {
-      --slm-bg-main: #eef3f7; --slm-bg-surface: #ffffff; --slm-bg-elevated: #f3f7fa; --slm-tile-bg: #ffffff;
+      --slm-bg-main: var(--hub-m-main, #eef3f7); --slm-bg-surface: var(--hub-surface, #ffffff); --slm-bg-elevated: var(--hub-surface-2, #f3f7fa); --slm-tile-bg: var(--hub-surface, #ffffff);
       --slm-border-subtle: rgba(20,40,60,0.10); --slm-line-soft: rgba(20,40,60,0.07);
       --slm-accent-primary: #1f9d7c; --slm-accent-soft: rgba(31,157,124,0.14); --slm-accent-text: #14735a;
       --slm-accent-ink: #ffffff; --slm-total-bar-bg: #1f9d7c;

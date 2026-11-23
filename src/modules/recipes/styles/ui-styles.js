@@ -156,13 +156,13 @@ export function paletteFor(uiStyle, isDark, themeId) {
 // KSH Family Hub: the module sits on the hub's navy surface and takes the Meals accent.
 export const HUB_OVERRIDES = {
   dark: {
-    '--rm-bg-main': '#111f2f', '--rm-bg-surface': '#162b41', '--rm-bg-elevated': '#1c354e',
+    '--rm-bg-main': 'var(--hub-m-main, #111f2f)', '--rm-bg-surface': 'var(--hub-surface, #162b41)', '--rm-bg-elevated': 'var(--hub-surface-2, #1c354e)',
     '--rm-border': 'rgba(255,255,255,0.09)', '--rm-line': 'rgba(255,255,255,0.06)',
     '--rm-accent': '#f59a4d', '--rm-accent-soft': 'rgba(245,154,77,0.18)', '--rm-accent-text': '#ffbf85',
     '--rm-ink': '#2a1503',
   },
   light: {
-    '--rm-bg-main': '#eef3f7', '--rm-bg-surface': '#ffffff', '--rm-bg-elevated': '#f3f7fa',
+    '--rm-bg-main': 'var(--hub-m-main, #eef3f7)', '--rm-bg-surface': 'var(--hub-surface, #ffffff)', '--rm-bg-elevated': 'var(--hub-surface-2, #f3f7fa)',
     '--rm-border': 'rgba(20,40,60,0.10)', '--rm-line': 'rgba(20,40,60,0.07)',
     '--rm-accent': '#d9731c', '--rm-accent-soft': 'rgba(217,115,28,0.14)', '--rm-accent-text': '#a95410',
     '--rm-ink': '#ffffff',

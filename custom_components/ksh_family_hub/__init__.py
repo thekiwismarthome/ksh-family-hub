@@ -22,6 +22,7 @@ from .const import (
     MODULE_SHOPPING,
     OPTION_HIDDEN_ITEMS,
 )
+from . import households
 from .migrate import async_import_legacy_storage, async_import_report
 
 _LOGGER = logging.getLogger(__name__)
@@ -138,6 +139,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 def _register_hub_commands(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_get_info)
     websocket_api.async_register_command(hass, ws_set_modules)
+    households.async_register_commands(hass)
 
 
 @websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/get_info"})

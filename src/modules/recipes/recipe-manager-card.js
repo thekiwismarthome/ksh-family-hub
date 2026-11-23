@@ -393,6 +393,14 @@ class RecipeManagerCard extends LitElement {
   getCardSize() { return 6; }
 
   /** Called by the hub's sub-navigation. */
+  /** Called by the hub (Change Region/Language). */
+  setLanguage(code) {
+    if (this._settings.language === code) return;
+    this._settings = { ...this._settings, language: code };
+    saveSettings(this._settings);
+    setActiveLocale(code);
+  }
+
   setHubView(view) {
     if (view === this._view) return;
     this._navDirection = 'forward';
