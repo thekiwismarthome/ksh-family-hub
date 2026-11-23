@@ -1,6 +1,6 @@
 {
   "name": "ksh-family-hub",
-  "version": "0.1.0-beta.3",
+  "version": "0.1.0-beta.4",
   "description": "KSH Family Hub: recipes, meal planner and shopping lists for Home Assistant",
   "private": true,
   "type": "module",

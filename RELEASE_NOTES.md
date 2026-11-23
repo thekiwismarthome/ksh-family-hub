@@ -1,6 +1,6 @@
 # Release notes
 
-## Unreleased
+## 0.1.0-beta.4
 
 - **New top bar** on every page: KSH logo, then the household name on Home (the page name everywhere else).
   The logo is no longer in the menu list.
