@@ -15,9 +15,10 @@ Recipes, meal planning and shopping lists for Home Assistant, in **one** integra
 | --- | --- |
 | **Home** | Today's meals, open shopping items, shortcuts, hub settings |
 | **Shopping** | Shopping List Manager: lists, catalogue, supermarkets, households |
+| **Chores** | Chores for the family: assign, repeat, reminders; children do, adults approve; routines; points |
 | **Cards** | Loyalty cards (part of Shopping) |
 | **Meals** | Everything Recipe Manager does: recipes, importers, meal planner, timers |
-| Wishlist, Chores, Finances, Medicine, Reminders, Birthdays, Expiry, Routines, Timetables, Chat, Location | Placeholders for what comes next |
+| Wishlist, Finances, Medicine, Reminders, Birthdays, Expiry, Routines, Timetables, Chat, Location | Placeholders for what comes next |
 
 **Phone:** a floating bottom bar (Home, Shopping, Meals, Wishlist, More) and a *More* sheet with every section.
 **Tablet / desktop (≥ 700 px wide):** a slim icon rail down the left with every section.

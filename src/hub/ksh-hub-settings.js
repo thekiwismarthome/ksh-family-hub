@@ -2,7 +2,10 @@ import { LitElement, html, css, nothing } from 'lit';
 import { PALETTES } from './hub-styles.js';
 import { ITEMS } from './modules.js';
 
+const PARTS = ['shopping', 'meals', 'chores'];
+
 const DESCRIPTIONS = {
+  chores: 'Chores, routines and points for the family',
   shopping: 'Lists, product catalogue and supermarkets',
   meals: 'Recipe book, meal planner and cooking timers',
   cards: 'Loyalty cards (needs Shopping)',
@@ -34,19 +37,19 @@ class KshHubSettings extends LitElement {
   _isOn(item) {
     const hidden = this.info?.hidden || [];
     if (item.module && !this.info?.modules?.[item.module]) return false;
-    // Shopping and Meals are the parts themselves; everything else is a menu entry
-    return item.id === 'shopping' || item.id === 'meals' ? true : !hidden.includes(item.id);
+    // Shopping, Meals and Chores are the parts themselves; everything else is a menu entry
+    return PARTS.includes(item.id) ? true : !hidden.includes(item.id);
   }
 
   _toggle(item, value) {
     this._error = null;
     const modules = this.info?.modules || {};
-    // Shopping and Meals switch a whole part of the integration on or off
-    if (item.id === 'shopping' || item.id === 'meals') {
+    // Shopping, Meals and Chores switch a whole part of the integration on or off
+    if (PARTS.includes(item.id)) {
       const key = item.module;
       const others = Object.entries(modules).filter(([k]) => k !== key);
       if (!value && others.every(([, v]) => !v)) {
-        this._error = 'Keep at least one of Shopping and Meals switched on.';
+        this._error = 'Keep at least one of Shopping, Meals and Chores switched on.';
         return;
       }
       this._emit('hub-config', { modules: { [key]: value } });
@@ -58,7 +61,7 @@ class KshHubSettings extends LitElement {
   render() {
     const admin = this._isAdmin;
     const row = item => {
-      const partOff = item.module && !this.info?.modules?.[item.module] && item.id !== 'shopping' && item.id !== 'meals';
+      const partOff = item.module && !this.info?.modules?.[item.module] && !PARTS.includes(item.id);
       const on = this._isOn(item);
       return html`
         <div class="row" style="--c:${item.color}">
@@ -85,7 +88,7 @@ class KshHubSettings extends LitElement {
         <section class="card">${items.map(row)}</section>
         ${!admin ? html`<p class="note">Only a Home Assistant administrator can switch parts on or off.</p>` : nothing}
         ${this._error || this.applyError ? html`<p class="note err">${this._error || this.applyError}</p>` : nothing}
-        <p class="note">Shopping and Meals load or unload that part of the integration (this takes a few seconds in the background).
+        <p class="note">Shopping, Meals and Chores load or unload that part of the integration (this takes a few seconds in the background).
           The other entries only show or hide their menu item. Nothing is ever deleted: switching a part back on restores everything.</p>
 
         <h3>Appearance</h3>

@@ -5,9 +5,11 @@ DOMAIN = "ksh_family_hub"
 # Modules that can be switched on and off. key -> config-entry option name
 MODULE_RECIPES = "recipes"
 MODULE_SHOPPING = "shopping"
+MODULE_CHORES = "chores"
 MODULE_OPTIONS = {
     MODULE_RECIPES: "enable_recipes",
     MODULE_SHOPPING: "enable_shopping",
+    MODULE_CHORES: "enable_chores",
 }
 
 DEFAULT_COUNTRY = "NZ"

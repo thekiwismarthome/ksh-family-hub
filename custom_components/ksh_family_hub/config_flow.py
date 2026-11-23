@@ -36,6 +36,7 @@ class KshFamilyHubConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 options={
                     "enable_recipes": user_input["enable_recipes"],
                     "enable_shopping": user_input["enable_shopping"],
+                    "enable_chores": user_input["enable_chores"],
                     "country": user_input["country"],
                     "show_panel": True,
                     "enable_price_tracking": True,
@@ -49,6 +50,7 @@ class KshFamilyHubConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=vol.Schema({
                 vol.Required("enable_recipes", default=True): bool,
                 vol.Required("enable_shopping", default=True): bool,
+                vol.Required("enable_chores", default=True): bool,
                 vol.Required("country", default=DEFAULT_COUNTRY): vol.In(COUNTRIES),
             }),
         )
@@ -76,6 +78,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             data_schema=vol.Schema({
                 vol.Required("enable_recipes", default=o.get("enable_recipes", True)): bool,
                 vol.Required("enable_shopping", default=o.get("enable_shopping", True)): bool,
+                vol.Required("enable_chores", default=o.get("enable_chores", True)): bool,
                 vol.Required("country", default=current): vol.In(countries),
                 vol.Optional("show_panel", default=o.get("show_panel", True)): bool,
                 vol.Optional("enable_price_tracking", default=o.get("enable_price_tracking", True)): bool,

@@ -1,4 +1,7 @@
 import { LitElement, html, css, nothing } from 'lit';
+import { enableSwipeClose } from './swipe.js';
+import { getActing } from './actor.js';
+import { EMOJIS } from '../modules/chores/templates.js';
 
 const LANGUAGES = [
   ['en', 'English'], ['es', 'Español'], ['fr', 'Français'], ['de', 'Deutsch'],
@@ -10,7 +13,7 @@ const QUICK = [
   { id: 'shopping',  label: 'Shopping List', icon: 'mdi:cart-outline',        color: '#4fd1a1', module: 'shopping' },
   { id: 'meals',     label: 'Recipes',       icon: 'mdi:silverware-fork-knife', color: '#f59a4d', module: 'recipes' },
   { id: 'reminders', label: 'Reminders',     icon: 'mdi:bell-outline',        color: '#6f80f2', soon: true },
-  { id: 'chores',    label: 'Chores',        icon: 'mdi:check-circle-outline', color: '#3db6cc', soon: true },
+  { id: 'chores',    label: 'Chores',        icon: 'mdi:check-circle-outline', color: '#3db6cc', module: 'chores' },
   { id: 'birthdays', label: 'Birthdays',     icon: 'mdi:cake-variant-outline', color: '#cf6fb6', soon: true },
 ];
 
@@ -34,6 +37,10 @@ class KshHubSheets extends LitElement {
     _toast: { state: true },
     _regions: { state: true },
     _country: { state: true },
+    _people: { state: true },
+    _me: { state: true },
+    _edit: { state: true },
+    _form: { state: true },
   };
 
   constructor() {
@@ -48,11 +55,15 @@ class KshHubSheets extends LitElement {
     this._toast = null;
     this._regions = null;
     this._country = '';
+    this._people = [];
+    this._me = null;
+    this._edit = null;
+    this._form = null;
   }
 
   get _active() { return this.households.find(h => h.id === this.activeId) || this.households[0]; }
 
-  get _people() {
+  get _haPeople() {
     return Object.values(this.hass?.states || {})
       .filter(s => s.entity_id.startsWith('person.') && s.attributes?.user_id)
       .map(s => ({ user_id: s.attributes.user_id, name: s.attributes.friendly_name || s.entity_id }));
@@ -67,7 +78,10 @@ class KshHubSheets extends LitElement {
       this._error = null; this._quick = null; this._itemName = ''; this._toast = null;
       if (this.sheet === 'menu') this._switcher = false;
       if (this.sheet === 'region' && !this._regions) this._loadRegions();
+      if (this.sheet === 'people') { this._edit = null; this._loadPeople(); }
     }
+    const sheet = this.renderRoot.querySelector('.sheet');
+    if (sheet && !sheet._swipe) { sheet._swipe = true; enableSwipeClose(sheet, () => this._close()); }
     if (this._quick === 'shopping' && changed.has('_quick')) this.renderRoot.querySelector('.field input')?.focus();
   }
 
@@ -141,6 +155,50 @@ class KshHubSheets extends LitElement {
     this._emit('hub-quick', { id: q.id });
   }
 
+  // ---- people --------------------------------------------------------------
+
+  async _loadPeople() {
+    try {
+      const res = await this.hass.callWS({ type: 'ksh_family_hub/people/list' });
+      this._people = res.people;
+      this._me = res.me;
+    } catch (err) { this._error = err?.message || 'Could not load people'; }
+  }
+
+  get _iAmAdult() {
+    const acting = this._people.find(p => p.id === getActing(this.hass)) || this._people.find(p => p.id === this._me);
+    return acting ? acting.role === 'adult' : !!this.hass?.user?.is_admin;
+  }
+
+  _startPerson(p) {
+    this._edit = p ? p.id : 'new';
+    this._form = p
+      ? { name: p.name, role: p.role, emoji: p.emoji, pin: '', clearPin: false, notify: p.notify || '' }
+      : { name: '', role: 'child', emoji: '🙂', pin: '', clearPin: false, notify: '' };
+    this._error = null;
+  }
+
+  async _savePerson() {
+    const f = this._form;
+    if (!f.name.trim()) { this._error = 'Give them a name'; return; }
+    if (f.pin && !/^\d{4}$/.test(f.pin)) { this._error = 'A PIN is four digits'; return; }
+    const acting = getActing(this.hass);
+    const base = { name: f.name.trim(), role: f.role, emoji: f.emoji || '🙂', notify: f.notify.trim() || null };
+    if (acting) base.as_person = acting;
+    let res;
+    if (this._edit === 'new') res = await this._ws({ type: 'ksh_family_hub/people/add', ...base, ...(f.pin ? { pin: f.pin } : {}) });
+    else res = await this._ws({ type: 'ksh_family_hub/people/update', person_id: this._edit, ...base, ...(f.pin ? { pin: f.pin } : f.clearPin ? { pin: null } : {}) });
+    if (res) { this._edit = null; this._form = null; this._loadPeople(); }
+  }
+
+  async _deletePerson() {
+    const p = this._people.find(x => x.id === this._edit);
+    if (!confirm(`Remove ${p.name}? Points they earned stay in the history.`)) return;
+    const acting = getActing(this.hass);
+    const res = await this._ws({ type: 'ksh_family_hub/people/delete', person_id: p.id, ...(acting ? { as_person: acting } : {}) });
+    if (res) { this._edit = null; this._form = null; this._loadPeople(); }
+  }
+
   // ---- region and language --------------------------------------------------
 
   async _loadRegions() {
@@ -171,23 +229,24 @@ class KshHubSheets extends LitElement {
     return html`
       <div class="scrim" @click=${this._close}></div>
       <section class="sheet" role="dialog" aria-label=${this._label}
-        @pointerdown=${this._down} @pointermove=${this._move} @pointerup=${this._up} @pointercancel=${this._up}>
+  >
         <div class="grabber"></div>
         ${this.sheet === 'menu' ? this._menu() : nothing}
         ${this.sheet === 'quick' ? this._quickSheet() : nothing}
         ${this.sheet === 'invite' ? this._invite() : nothing}
         ${this.sheet === 'region' ? this._region() : nothing}
+        ${this.sheet === 'people' ? this._peopleSheet() : nothing}
       </section>`;
   }
 
   get _label() {
-    return { menu: 'Menu', quick: 'Quick add', invite: 'Invite member', region: 'Region and language' }[this.sheet] || '';
+    return { menu: 'Menu', quick: 'Quick add', invite: 'Invite member', region: 'Region and language', people: 'People and guests' }[this.sheet] || '';
   }
 
-  _head(title, back) {
+  _head(title, back, onBack) {
     return html`
       <div class="head">
-        ${back ? html`<button class="back" aria-label="Back" @click=${() => this._open('menu')}><ha-icon icon="mdi:arrow-left"></ha-icon></button>` : nothing}
+        ${back || onBack ? html`<button class="back" aria-label="Back" @click=${onBack || (() => this._open('menu'))}><ha-icon icon="mdi:arrow-left"></ha-icon></button>` : nothing}
         <h2>${title}</h2>
       </div>`;
   }
@@ -226,6 +285,7 @@ class KshHubSheets extends LitElement {
       ${this._error ? html`<p class="err">${this._error}</p>` : nothing}
       <div class="divider"></div>
       ${this._row('mdi:account-plus-outline', 'Invite member', () => this._open('invite'), { color: '#6f80f2' })}
+      ${this._row('mdi:account-child-outline', 'People & guests', () => this._open('people'), { color: '#e2ac3f' })}
       ${this._row('mdi:cog-outline', 'Settings', () => this._emit('hub-open-settings'), { color: '#9fb2c5' })}
       ${this._row('mdi:translate', 'Change Region/Language', () => this._open('region'), { color: '#4a86f0' })}
       ${this.panel ? html`
@@ -255,7 +315,7 @@ class KshHubSheets extends LitElement {
   _invite() {
     const h = this._active;
     if (!h) return html`${this._head('Invite member', true)}<p class="hint">No household yet.</p>`;
-    const people = this._people;
+    const people = this._haPeople;
     const nameOf = id => people.find(p => p.user_id === id)?.name || 'Unknown user';
     const canAdd = people.filter(p => !h.members.includes(p.user_id));
     return html`
@@ -286,6 +346,56 @@ class KshHubSheets extends LitElement {
           ${this._row('mdi:pencil-outline', 'Rename household', () => this._renameHousehold(), { color: '#9fb2c5' })}
           ${this._row('mdi:trash-can-outline', 'Delete household', () => this._deleteHousehold(), { color: '#e46d5e' })}`
           : html`<p class="hint">Only the owner can add people.</p>`}`}
+      ${this._row('mdi:account-child-outline', 'Add someone without a login', () => this._open('people'), { color: '#e2ac3f', sub: 'Children and guests', chevron: true })}
+      ${this._error ? html`<p class="err">${this._error}</p>` : nothing}`;
+  }
+
+  _peopleSheet() {
+    const label = { adult: 'Adult', child: 'Child', guest: 'Guest' };
+    if (this._edit) {
+      const f = this._form;
+      const person = this._people.find(p => p.id === this._edit);
+      const set = patch => { this._form = { ...this._form, ...patch }; };
+      return html`
+        ${this._head(this._edit === 'new' ? 'Add a person' : `Edit ${person?.name || ''}`, false, () => { this._edit = null; this._error = null; })}
+        <div class="pform">
+          <label>Name<input maxlength="40" .value=${f.name} @input=${e => set({ name: e.target.value })} placeholder="e.g. Leo"></label>
+          <label>Role</label>
+          <div class="seg">${Object.entries(label).map(([v, l]) => html`<button type="button" class=${f.role === v ? 'on' : ''} @click=${() => set({ role: v })}>${l}</button>`)}</div>
+          <p class="hint">${{
+            adult: 'Adults manage chores, approve them and look after people.',
+            child: 'Children do chores and routines. An adult approves them.',
+            guest: 'Guests only see chores that are assigned to them.' }[f.role]}</p>
+          <label>Picture</label>
+          <div class="emojis"><input class="emoji-in" maxlength="8" .value=${f.emoji} @input=${e => set({ emoji: e.target.value })}>
+            ${EMOJIS.map(e => html`<button type="button" class=${e === f.emoji ? 'on' : ''} @click=${() => set({ emoji: e })}>${e}</button>`)}</div>
+          <label>PIN <small>(optional)</small>
+            <input type="password" inputmode="numeric" maxlength="4" autocomplete="off" .value=${f.pin} placeholder=${person?.has_pin ? 'Type a new PIN to change it' : '4 digits'}
+              @input=${e => set({ pin: e.target.value.replace(/\D/g, ''), clearPin: false })}></label>
+          ${person?.has_pin ? html`<button type="button" class="linkbtn" @click=${() => set({ pin: '', clearPin: !f.clearPin })}>${f.clearPin ? 'The PIN will be removed. Undo' : 'Remove the PIN'}</button>` : nothing}
+          <p class="hint">A PIN stops someone on a shared tablet from switching to this person.</p>
+          <label>Phone notifications <small>(optional)</small>
+            <input .value=${f.notify} placeholder="notify.mobile_app_their_phone" @input=${e => set({ notify: e.target.value })}></label>
+          <p class="hint">The notify service of their phone in Home Assistant, used for chore reminders.</p>
+          ${this._error ? html`<p class="err">${this._error}</p>` : nothing}
+          <div class="actions">
+            ${this._edit !== 'new' && !person?.user_id ? html`<button class="danger" @click=${() => this._deletePerson()} ?disabled=${this._busy}>Remove</button>` : nothing}
+            <button class="save" @click=${() => this._savePerson()} ?disabled=${this._busy}>Save</button>
+          </div>
+        </div>`;
+    }
+    return html`
+      ${this._head('People & guests', true)}
+      <p class="hint">Everyone who uses the hub. Children and guests do not need a Home Assistant login: an adult adds them here,
+        and they are picked on a shared tablet.</p>
+      ${this._people.map(p => html`
+        <button class="row" ?disabled=${!this._iAmAdult} @click=${() => this._startPerson(p)} style="--c:${p.color}">
+          <span class="ico" style="font-size:22px">${p.emoji}</span>
+          <span class="txt"><b>${p.name}</b><small>${label[p.role]}${p.user_id ? '' : ' · no login'}${p.has_pin ? ' · PIN' : ''}</small></span>
+          ${this._iAmAdult ? html`<ha-icon class="chev" icon="mdi:chevron-right"></ha-icon>` : nothing}
+        </button>`)}
+      ${this._iAmAdult ? this._row('mdi:account-plus-outline', 'Add a person', () => this._startPerson(null), { color: '#4fd1a1' })
+        : html`<p class="hint">Only an adult can add or change people.</p>`}
       ${this._error ? html`<p class="err">${this._error}</p>` : nothing}`;
   }
 
@@ -313,25 +423,6 @@ class KshHubSheets extends LitElement {
       ${this._error ? html`<p class="err">${this._error}</p>` : nothing}`;
   }
 
-  // swipe down to close
-  _down = e => {
-    if (e.target.closest('input, select, textarea') || (e.pointerType === 'mouse' && !e.target.closest('.grabber, .head'))) return;
-    this._drag = { y: e.clientY, dy: 0, el: e.currentTarget };
-  };
-  _move = e => {
-    if (!this._drag) return;
-    const dy = Math.max(0, e.clientY - this._drag.y);
-    this._drag.dy = dy;
-    if (dy > 6) this._drag.el.style.transform = `translateY(${dy}px)`;
-  };
-  _up = () => {
-    if (!this._drag) return;
-    const { dy, el } = this._drag;
-    this._drag = null;
-    el.style.transform = '';
-    if (dy > 90) this._close();
-  };
-
   static styles = [css`
     :host { position: absolute; inset: 0; z-index: 30; pointer-events: none; display: block; }
     :host([sheet]) { pointer-events: auto; }
@@ -339,7 +430,7 @@ class KshHubSheets extends LitElement {
     button, input, select { font: inherit; color: inherit; }
     .scrim { position: absolute; inset: 0; background: rgba(4, 12, 20, 0.55); animation: fade .18s ease; }
     .sheet {
-      position: absolute; left: 0; right: 0; bottom: 0; max-height: 88%; overflow-y: auto; touch-action: pan-y;
+      position: absolute; left: 0; right: 0; bottom: 0; max-height: 88%; overflow-y: auto; overscroll-behavior: contain;
       max-width: 560px; margin: 0 auto;
       background: var(--hub-sheet); border-radius: 30px 30px 0 0; padding: 12px 16px calc(24px + env(safe-area-inset-bottom, 0px));
       box-shadow: var(--hub-shadow); animation: rise .24s cubic-bezier(.2,.8,.2,1); color: var(--hub-text);
@@ -396,6 +487,22 @@ class KshHubSheets extends LitElement {
     .err { margin: 8px 6px 0; color: #e8685a; font-size: 13.5px; }
     .ok { margin: 10px 6px 0; display: flex; align-items: center; gap: 6px; color: var(--hub-accent); font-size: 14px; font-weight: 600; }
     .ok ha-icon { --mdc-icon-size: 18px; }
+    .pform { display: grid; gap: 8px; }
+    .pform label { display: grid; gap: 6px; font-weight: 700; font-size: 13.5px; margin-top: 4px; }
+    .pform label small { color: var(--hub-muted); font-weight: 500; }
+    .pform input { width: 100%; padding: 11px 14px; border-radius: 14px; border: 1px solid var(--hub-border); background: var(--hub-surface); color: var(--hub-text); outline: none; font-size: 15px; }
+    .pform input:focus { border-color: var(--hub-accent); }
+    .seg { display: flex; border: 1px solid var(--hub-border); border-radius: 999px; overflow: hidden; }
+    .seg button { flex: 1; background: transparent; border: none; padding: 9px 6px; font-weight: 700; color: var(--hub-muted); cursor: pointer; }
+    .seg button.on { background: var(--hub-accent); color: var(--hub-accent-ink); }
+    .emojis { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+    .emojis button { width: 38px; height: 38px; font-size: 20px; border-radius: 12px; border: 1px solid transparent; background: var(--hub-surface); cursor: pointer; }
+    .emojis button.on { border-color: var(--hub-accent); }
+    .emoji-in { width: 64px !important; text-align: center; font-size: 22px !important; padding: 6px !important; }
+    .linkbtn { background: none; border: none; color: var(--hub-accent); font-weight: 700; text-align: left; padding: 2px 0; cursor: pointer; }
+    .actions { display: flex; gap: 10px; margin-top: 8px; }
+    .save { flex: 1; border: none; border-radius: 999px; padding: 11px 18px; font-weight: 800; background: var(--hub-accent); color: var(--hub-accent-ink); cursor: pointer; }
+    .danger { border: 1px solid rgba(232,104,90,.5); background: transparent; color: #e8685a; border-radius: 999px; padding: 11px 18px; font-weight: 700; cursor: pointer; }
     @keyframes rise { from { transform: translateY(40px); opacity: 0; } }
     @keyframes fade { from { opacity: 0; } }
   `];

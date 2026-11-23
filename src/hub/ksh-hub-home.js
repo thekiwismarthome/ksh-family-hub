@@ -17,6 +17,7 @@ class KshHubHome extends LitElement {
     dark: { type: Boolean },
     panel: { type: Boolean },     // running as a Home Assistant sidebar panel
     _shopping: { state: true },   // { list, open } | null
+    _chores: { state: true },     // {open, waiting} | null
     _meals: { state: true },      // [{meal_type, recipe_name}] | null
     _loaded: { state: true },
   };
@@ -25,6 +26,7 @@ class KshHubHome extends LitElement {
     super();
     this._shopping = null;
     this._meals = null;
+    this._chores = null;
     this._loaded = false;
     this._requested = false;
   }
@@ -40,6 +42,7 @@ class KshHubHome extends LitElement {
     const jobs = [];
     if (this.modules.shopping) jobs.push(this._loadShopping());
     if (this.modules.recipes) jobs.push(this._loadMeals());
+    if (this.modules.chores) jobs.push(this._loadChores());
     await Promise.allSettled(jobs);
     this._loaded = true;
   }
@@ -52,6 +55,17 @@ class KshHubHome extends LitElement {
       const { items = [] } = await this.hass.callWS({ type: 'ksh_shopping/items/get', list_id: list.id });
       this._shopping = { list, open: items.filter(i => !i.checked).length };
     } catch { this._shopping = null; }
+  }
+
+  async _loadChores() {
+    try {
+      const st = await this.hass.callWS({ type: 'ksh_chores/get_state', date: isoToday() });
+      this._chores = {
+        open: st.items.filter(i => ['open', 'rejected'].includes(i.status)).length,
+        done: st.items.filter(i => ['done', 'approved'].includes(i.status)).length,
+        waiting: st.pending.length,
+      };
+    } catch { this._chores = null; }
   }
 
   async _loadMeals() {
@@ -92,7 +106,8 @@ class KshHubHome extends LitElement {
         <div class="cards">
           ${this.modules?.shopping ? this._shoppingCard() : nothing}
           ${this.modules?.recipes ? this._mealsCard() : nothing}
-          ${!this.modules?.shopping && !this.modules?.recipes ? html`
+          ${this.modules?.chores ? this._choresCard() : nothing}
+          ${!this.modules?.shopping && !this.modules?.recipes && !this.modules?.chores ? html`
             <section class="card wide">
               <h2>Nothing switched on</h2>
               <p class="muted">Turn on Shopping or Recipes in the hub settings to get started.</p>
@@ -125,6 +140,20 @@ class KshHubHome extends LitElement {
             <p class="big">${s.open}<span> ${s.open === 1 ? 'item' : 'items'} to buy</span></p>
             <p class="muted">${s.list.name}</p>`}
         <button class="link" @click=${() => this._go('shopping')}>Open shopping <ha-icon icon="mdi:chevron-right"></ha-icon></button>
+      </section>`;
+  }
+
+  _choresCard() {
+    const c = this._chores;
+    const color = ITEMS.find(i => i.id === 'chores').color;
+    return html`
+      <section class="card" style="--c:${color}">
+        <div class="card-head"><span class="dot"><ha-icon icon="mdi:check-circle-outline"></ha-icon></span><h2>Chores today</h2></div>
+        ${!this._loaded && !c ? html`<p class="muted">Loading…</p>`
+          : !c ? html`<p class="muted">Couldn't load the chores.</p>`
+          : html`<p class="big">${c.open}<span> to do</span></p>
+              <p class="muted">${c.done} done${c.waiting ? ` · ${c.waiting} waiting for approval` : ''}</p>`}
+        <button class="link" @click=${() => this._go('chores')}>Open chores <ha-icon icon="mdi:chevron-right"></ha-icon></button>
       </section>`;
   }
 

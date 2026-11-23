@@ -7,6 +7,7 @@
         "data": {
           "enable_recipes": "Recipes & Meal Planner",
           "enable_shopping": "Shopping Lists",
+          "enable_chores": "Chores & Routines",
           "country": "Country (shopping catalogue)"
         }
       }
@@ -22,6 +23,7 @@
         "data": {
           "enable_recipes": "Recipes & Meal Planner",
           "enable_shopping": "Shopping Lists",
+          "enable_chores": "Chores & Routines",
           "country": "Country (shopping catalogue)",
           "enable_price_tracking": "Enable price tracking",
           "enable_image_search": "Enable image search",
@@ -31,6 +33,7 @@
         "data_description": {
           "enable_recipes": "Recipes, meal planner and cooking timers.",
           "enable_shopping": "Shopping lists, product catalogue, loyalty cards and supermarkets.",
+          "enable_chores": "Chores, routines and a points balance for the family.",
           "show_panel": "Adds a full-screen Family Hub entry to the Home Assistant sidebar."
         }
       }

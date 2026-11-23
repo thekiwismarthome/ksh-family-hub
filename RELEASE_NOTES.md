@@ -1,5 +1,20 @@
 # Release notes
 
+## Unreleased
+
+- **Chores** (new part of the hub, can be switched off like Shopping and Meals):
+  - Assign a chore to one person, several, or **Anyone**. Repeat **Daily, Weekly** (pick the days) or **Custom** (every N days, weeks or months).
+  - **Children** mark a chore done, **adults** approve it. Points are paid **once**, when it is approved (an adult doing a chore themselves counts straight away). An adult can send a chore back or undo an approved one, which takes the points back.
+  - **Routines**: step-by-step morning or evening routines for children, paying into the same points balance when the last step is done.
+  - A **reminder at each chore's own due time**: sent to the phones set up for the people it is assigned to, otherwise shown in Home Assistant's notifications. A `ksh_chores_due` event fires too, for automations.
+  - A **standard list** of about 30 chores (with emojis) and two standard routines to start from.
+  - Points: balances for everyone, a history, and adults can add or take away points.
+- **People & guests**: every Home Assistant user gets a profile; adults can add children and guests who have **no Home Assistant login**, give each a role (adult, child, guest), an emoji and an optional PIN, and pick who is using a shared tablet. Guests only see chores assigned to them.
+- Menu: People & guests; Quick add > Chores opens the add-a-chore list.
+- Pop-ups close by swiping them down.
+- Tablet: the logo sits top left with the menu below it; the household name has no label; the logo is a little bigger.
+- The Settings tab on Shopping, Meals and Chores is now an icon, always at the right of the tab row.
+
 ## 0.1.0-beta.4
 
 - **New top bar** on every page: KSH logo, then the household name on Home (the page name everywhere else).

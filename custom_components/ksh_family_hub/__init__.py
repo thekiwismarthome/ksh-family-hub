@@ -18,11 +18,12 @@ from .const import (
     DEFAULT_COUNTRY,
     DOMAIN,
     MODULE_OPTIONS,
+    MODULE_CHORES,
     MODULE_RECIPES,
     MODULE_SHOPPING,
     OPTION_HIDDEN_ITEMS,
 )
-from . import households
+from . import households, people
 from .migrate import async_import_legacy_storage, async_import_report
 
 _LOGGER = logging.getLogger(__name__)
@@ -93,12 +94,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         country = entry.options.get("country") or entry.data.get("country") or DEFAULT_COUNTRY
         unsubs.extend(await shopping.async_setup_module(hass, version, country))
 
+    if modules[MODULE_CHORES]:
+        from . import chores
+        unsubs.extend(await chores.async_setup_module(hass, version))
+
     entry.async_on_unload(entry.add_update_listener(_update_listener))
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     _LOGGER.info(
-        "KSH Family Hub %s ready (recipes=%s, shopping=%s)",
-        version, modules[MODULE_RECIPES], modules[MODULE_SHOPPING],
+        "KSH Family Hub %s ready (recipes=%s, shopping=%s, chores=%s)",
+        version, modules[MODULE_RECIPES], modules[MODULE_SHOPPING], modules[MODULE_CHORES],
     )
     return True
 
@@ -128,6 +133,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if modules.get(MODULE_SHOPPING):
         from . import shopping
         await shopping.async_unload_module(hass)
+    if modules.get(MODULE_CHORES):
+        from . import chores
+        await chores.async_unload_module(hass)
     hass.data.pop(DOMAIN, None)
     return True
 
@@ -140,6 +148,7 @@ def _register_hub_commands(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_get_info)
     websocket_api.async_register_command(hass, ws_set_modules)
     households.async_register_commands(hass)
+    people.async_register_commands(hass)
 
 
 @websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/get_info"})
@@ -149,7 +158,7 @@ async def ws_get_info(hass, connection, msg) -> None:
     hub = hass.data.get(DOMAIN, {})
     connection.send_result(msg["id"], {
         "version": hub.get("version", "unknown"),
-        "modules": hub.get("modules", {MODULE_RECIPES: False, MODULE_SHOPPING: False}),
+        "modules": hub.get("modules", {MODULE_RECIPES: False, MODULE_SHOPPING: False, MODULE_CHORES: False}),
         "hidden": hub.get("hidden", []),
         "imported": await async_import_report(hass),
     })
@@ -159,6 +168,7 @@ async def ws_get_info(hass, connection, msg) -> None:
     vol.Required("type"): f"{DOMAIN}/set_modules",
     vol.Optional(MODULE_RECIPES): bool,
     vol.Optional(MODULE_SHOPPING): bool,
+    vol.Optional(MODULE_CHORES): bool,
     vol.Optional("hidden"): [str],
 })
 @websocket_api.require_admin

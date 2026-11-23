@@ -1,6 +1,7 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { keyed } from 'lit/directives/keyed.js';
 import { CARD_VERSION } from 'virtual:card-version';
+import { enableSwipeClose } from './hub/swipe.js';
 import { ITEMS, SUB_TABS, visibleItems, itemById } from './hub/modules.js';
 import { hubTokens } from './hub/hub-styles.js';
 import './hub/ksh-hub-home.js';
@@ -9,6 +10,7 @@ import './hub/ksh-hub-placeholder.js';
 import './hub/ksh-hub-sheets.js';
 import './modules/recipes/recipe-manager-card.js';    // <ksh-recipes-module>
 import './modules/shopping/shopping-list-manager-card.js'; // <ksh-shopping-module>
+import './modules/chores/ksh-chores-module.js';           // <ksh-chores-module>
 
 const ROUTE_KEY = 'ksh_hub_route';
 const THEME_KEY = 'ksh_hub_theme';
@@ -18,8 +20,8 @@ const RAIL_MIN_WIDTH = 700;
 const LOGO_URL = `/ksh_family_hub/static/ksh-logo.png?v=${CARD_VERSION}`;
 
 // Menu entries backed by a real module element
-const MODULE_ELEMENT = { shopping: 'ksh-shopping-module', cards: 'ksh-shopping-module', meals: 'ksh-recipes-module' };
-const MODULE_DEFAULT_VIEW = { shopping: 'shopping', meals: 'grid' };
+const MODULE_ELEMENT = { shopping: 'ksh-shopping-module', cards: 'ksh-shopping-module', meals: 'ksh-recipes-module', chores: 'ksh-chores-module' };
+const MODULE_DEFAULT_VIEW = { shopping: 'shopping', meals: 'grid', chores: 'today' };
 // Sub views that take over the whole module (the module's own header has a back button)
 const HIDE_TABS_IN = { meals: ['detail', 'add'] };
 
@@ -123,6 +125,8 @@ export class KshFamilyHubCard extends LitElement {
   }
 
   updated(changed) {
+    const more = this.renderRoot.querySelector('.sheet');
+    if (more && !more._swipe) { more._swipe = true; enableSwipeClose(more, () => { this._moreOpen = false; }); }
     if (changed.has('_theme') || changed.has('hass')) this._applyMode();
     if (changed.has('_palette')) this.setAttribute('data-theme', this._palette);
     if (changed.has('_route') || changed.has('_gen') || changed.has('_info')) this._syncShoppingView();
@@ -241,7 +245,7 @@ export class KshFamilyHubCard extends LitElement {
     this._subView = { ...this._subView, [this._route]: view };
     if (!el) return;
     if (this._route === 'shopping') el.currentView = view;
-    else if (this._route === 'meals') el.setHubView(view);
+    else if (this._route === 'meals' || this._route === 'chores') el.setHubView(view);
   }
 
   // ---- households -----------------------------------------------------------
@@ -294,6 +298,18 @@ export class KshFamilyHubCard extends LitElement {
     }
   }
 
+  // Quick add > Chores: open the add-a-chore picker
+  async _quickChore() {
+    this._sheet = null;
+    this._setRoute('chores');
+    for (let i = 0; i < 20; i++) {
+      await this.updateComplete;
+      const el = this.renderRoot.querySelector('#mod-chores');
+      if (el?.openAdd) { el.openAdd(); this._subView = { ...this._subView, chores: 'chores' }; return; }
+      await new Promise(r => setTimeout(r, 100));
+    }
+  }
+
   _topbar() {
     const route = this._route;
     const home = route === 'home';
@@ -306,7 +322,6 @@ export class KshFamilyHubCard extends LitElement {
         ${home ? html`
           <button class="who" @click=${() => { this._sheet = 'menu'; }} aria-label="Household: ${title}">
             <span class="page-title">${title}</span>
-            <span class="sub">Household</span>
           </button>` : html`<h1 class="page-title">${title}</h1>`}
         <span class="spacer"></span>
         <button class="icon-btn" title="Quick add" aria-label="Quick add" @click=${() => { this._sheet = 'quick'; }}>
@@ -330,13 +345,15 @@ export class KshFamilyHubCard extends LitElement {
 
     const items = visibleItems(this._info.modules, this._info.hidden);
     return html`
-      <div class="shell ${this._rail ? 'rail-layout' : 'bar-layout'}">
-        ${this._rail ? this._renderRail(items) : nothing}
-        <main class="stage">
-          ${this._topbar()}
-          ${this._renderStage()}
-        </main>
-        ${!this._rail ? this._renderBar(items) : nothing}
+      <div class="shell">
+        ${this._topbar()}
+        <div class="body ${this._rail ? 'rail-layout' : 'bar-layout'}">
+          ${this._rail ? this._renderRail(items) : nothing}
+          <main class="stage">
+            ${this._renderStage()}
+          </main>
+          ${!this._rail ? this._renderBar(items) : nothing}
+        </div>
       </div>
       ${this._moreOpen ? this._renderMore(items) : nothing}
       <ksh-hub-sheets .hass=${this.hass} .sheet=${this._sheet} .households=${this._households} .activeId=${this._householdId}
@@ -347,7 +364,7 @@ export class KshFamilyHubCard extends LitElement {
         @hub-households-changed=${e => this._loadHouseholds(e.detail.select)}
         @hub-open-settings=${() => { this._sheet = null; this._setRoute('settings'); }}
         @hub-set-language=${e => this._setLanguage(e.detail.code)}
-        @hub-quick=${e => { if (e.detail.id === 'meals') this._quickRecipe(); }}
+        @hub-quick=${e => { if (e.detail.id === 'meals') this._quickRecipe(); else if (e.detail.id === 'chores') this._quickChore(); }}
         @hub-region-changed=${() => { this._gen++; }}
         @hass-toggle-menu=${() => { this._sheet = null; }}></ksh-hub-sheets>
     `;
@@ -397,10 +414,15 @@ export class KshFamilyHubCard extends LitElement {
 
       ${showTabs ? html`
         <nav class="subtabs" aria-label="Sections">
-          ${tabs.map(t => html`
-            <button class="subtab ${sub === t.view ? 'active' : ''}" @click=${() => this._tabSelect(t.view)}>
-              <ha-icon icon=${t.icon}></ha-icon><span>${t.label}</span>
-            </button>`)}
+          <div class="subtab-list">
+            ${tabs.filter(t => t.view !== 'settings').map(t => html`
+              <button class="subtab ${sub === t.view ? 'active' : ''}" @click=${() => this._tabSelect(t.view)}>
+                <ha-icon icon=${t.icon}></ha-icon><span>${t.label}</span>
+              </button>`)}
+          </div>
+          ${tabs.some(t => t.view === 'settings') ? html`
+            <button class="subtab gear ${sub === 'settings' ? 'active' : ''}" title="Settings" aria-label="Settings"
+              @click=${() => this._tabSelect('settings')}><ha-icon icon="mdi:cog-outline"></ha-icon></button>` : nothing}
         </nav>` : nothing}
 
       ${keyed(this._gen, html`
@@ -415,6 +437,12 @@ export class KshFamilyHubCard extends LitElement {
             <ksh-recipes-module id="mod-meals" hub-mode
               .hass=${this.hass} .hostUi=${ui} .hostDark=${dark}
               @module-view-changed=${e => this._onModuleView('meals', e)}></ksh-recipes-module>
+          </div>` : nothing}
+        ${this._visited.has('chores') && this._info.modules.chores ? html`
+          <div class="module" ?hidden=${route !== 'chores'}>
+            <ksh-chores-module id="mod-chores" hub-mode .hass=${this.hass}
+              @hub-sheet=${e => { this._sheet = e.detail.sheet; }}
+              @module-view-changed=${e => this._onModuleView('chores', e)}></ksh-chores-module>
           </div>` : nothing}
       `)}
     `;
@@ -464,7 +492,7 @@ export class KshFamilyHubCard extends LitElement {
     return html`
       <div class="scrim" @click=${() => { this._moreOpen = false; }}></div>
       <section class="sheet" role="dialog" aria-label="All sections"
-        @pointerdown=${this._sheetDown} @pointermove=${this._sheetMove} @pointerup=${this._sheetUp} @pointercancel=${this._sheetUp}>
+>
         <div class="grabber"></div>
         <div class="grid">
           ${list.map(i => html`
@@ -475,25 +503,6 @@ export class KshFamilyHubCard extends LitElement {
         </div>
       </section>`;
   }
-
-  // swipe-down-to-close for the More sheet
-  _sheetDown = e => {
-    if (e.target.closest('.grid-item') && e.pointerType === 'mouse') return;
-    this._drag = { y: e.clientY, dy: 0, el: e.currentTarget };
-  };
-  _sheetMove = e => {
-    if (!this._drag) return;
-    const dy = Math.max(0, e.clientY - this._drag.y);
-    this._drag.dy = dy;
-    if (dy > 6) this._drag.el.style.transform = `translateY(${dy}px)`;
-  };
-  _sheetUp = () => {
-    if (!this._drag) return;
-    const { dy, el } = this._drag;
-    this._drag = null;
-    el.style.transform = '';
-    if (dy > 90) this._moreOpen = false;
-  };
 
   static styles = [hubTokens, css`
     :host {
@@ -512,23 +521,23 @@ export class KshFamilyHubCard extends LitElement {
     [hidden] { display: none !important; }
     button { font: inherit; color: inherit; }
 
-    .shell { height: 100%; display: flex; min-height: 0; }
-    .shell.bar-layout { flex-direction: column; }
-    .shell.rail-layout { flex-direction: row; }
+    .shell { height: 100%; display: flex; flex-direction: column; min-height: 0; }
+    .body { flex: 1; min-height: 0; display: flex; }
+    .body.bar-layout { flex-direction: column; }
+    .body.rail-layout { flex-direction: row; }
     .stage { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; position: relative; }
     .module { flex: 1; min-height: 0; display: block; position: relative; }
     .module > * { display: block; height: 100%; }
 
     /* ---- top bar: logo (phone), page title, settings gear ---- */
-    .topbar { flex: none; display: flex; align-items: center; gap: 10px; padding: 10px 14px 2px; min-height: 62px; }
+    .topbar { flex: none; display: flex; align-items: center; gap: 10px; padding: 10px 14px 4px 10px; min-height: 70px; }
     .page-title { min-width: 0; margin: 0; font-size: 20px; font-weight: 800; letter-spacing: -0.01em;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--hub-text); }
     .spacer { flex: 1; }
-    .who { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; background: none; border: none;
-      padding: 2px 6px; margin-left: -6px; cursor: pointer; border-radius: 10px; text-align: left; }
+    .who { min-width: 0; display: flex; align-items: center; background: none; border: none; color: inherit;
+      padding: 4px 8px; margin-left: -4px; cursor: pointer; border-radius: 10px; text-align: left; }
     .who:hover { background: var(--hub-surface-2); }
     .who .page-title { max-width: 100%; }
-    .who .sub { font-size: 11.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--hub-muted); }
     .icon-btn {
       flex: none; width: 42px; height: 42px; border-radius: 50%; border: 1px solid var(--hub-border); cursor: pointer;
       background: var(--hub-surface); color: var(--hub-muted); display: flex; align-items: center; justify-content: center;
@@ -536,15 +545,16 @@ export class KshFamilyHubCard extends LitElement {
     }
     .icon-btn:hover { color: var(--hub-text); }
     .icon-btn.active { background: var(--hub-accent); color: var(--hub-accent-ink); border-color: transparent; }
-    .logo { flex: none; width: 50px; height: 50px; padding: 0; border: none; background: none; cursor: pointer; border-radius: 15px; line-height: 0; }
-    .logo img { width: 100%; height: 100%; display: block; border-radius: 15px; }
+    .logo { flex: none; width: 58px; height: 58px; padding: 0; border: none; background: none; cursor: pointer; border-radius: 17px; line-height: 0; }
+    .logo img { width: 100%; height: 100%; display: block; border-radius: 17px; }
 
     /* ---- sub tabs ---- */
-    .subtabs {
-      display: flex; gap: 6px; padding: 10px 12px 6px; overflow-x: auto; flex: none;
-      scrollbar-width: none;
-    }
-    .subtabs::-webkit-scrollbar { display: none; }
+    .subtabs { display: flex; align-items: center; gap: 8px; padding: 6px 12px; flex: none; }
+    .subtab-list { flex: 1; min-width: 0; display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+    .subtab-list::-webkit-scrollbar { display: none; }
+    @media (max-width: 460px) { .subtab:not(.gear) ha-icon { display: none; } .subtab { padding: 7px 12px; } }
+    .subtab.gear { padding: 0; width: 38px; height: 38px; justify-content: center; border-radius: 50%; }
+    .subtab.gear ha-icon { --mdc-icon-size: 22px; }
     .subtab {
       display: inline-flex; align-items: center; gap: 6px; flex: none;
       padding: 7px 14px; border-radius: 999px; border: 1px solid var(--hub-border);
@@ -586,7 +596,7 @@ export class KshFamilyHubCard extends LitElement {
 
     /* ---- rail (tablet) ---- */
     .rail {
-      flex: none; width: 76px; margin: 10px 0 10px 10px; padding: 12px 0;
+      flex: none; width: 76px; margin: 4px 0 10px 10px; padding: 12px 0;
       display: flex; flex-direction: column; align-items: center; gap: 6px; overflow-y: auto; scrollbar-width: none;
       background: var(--hub-nav); border: 1px solid var(--hub-border); border-radius: 28px; box-shadow: var(--hub-shadow);
     }
@@ -604,7 +614,7 @@ export class KshFamilyHubCard extends LitElement {
       position: absolute; left: 0; right: 0; bottom: 0; z-index: 21; max-height: 88%; overflow-y: auto;
       background: var(--hub-sheet); border-radius: 30px 30px 0 0; padding: 12px 16px calc(28px + env(safe-area-inset-bottom, 0px));
       box-shadow: var(--hub-shadow); animation: rise .24s cubic-bezier(.2,.8,.2,1);
-      touch-action: pan-y;
+      overscroll-behavior: contain;
     }
     .grabber { width: 44px; height: 5px; border-radius: 3px; background: rgba(160, 190, 215, .55); margin: 2px auto 22px; }
     .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 26px 4px; }
