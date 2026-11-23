@@ -1,5 +1,13 @@
 # Release notes
 
+## 0.1.0-beta.3
+
+- **KSH logo** at the top left: top of the icon rail on tablets, top left of the new top bar on phones. Tap it for Home.
+- **Settings gear on every page** (top right). Shopping/Cards and Meals open their own settings; Home and the
+  other pages open the hub settings. The separate Settings sub-tabs in Shopping and Meals are gone.
+- The Home Assistant menu button moved into the top bar.
+- The card is now cached under the new version number, so updating no longer needs a cache clear.
+
 ## 0.1.0-beta.2
 
 - **Fixed: existing Recipe Manager / Shopping List Manager data was not imported.** Home Assistant lists `.storage`
