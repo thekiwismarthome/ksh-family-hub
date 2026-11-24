@@ -10,6 +10,7 @@ from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
+from .. import people as people_mod
 from . import logic
 from .const import DOMAIN, EVENT_DUE, EVENT_UPDATED, KEEP_DAYS, STORE_KEY
 
@@ -80,7 +81,7 @@ async def _send_reminders(hass: HomeAssistant) -> None:
     for chore in due:
         assigned = chore.get("assignees") or []
         targets = [p for p in everyone if (p["id"] in assigned if assigned else p["role"] != "guest")]
-        names = ", ".join(p["name"] for p in targets) if assigned else "Anyone"
+        names = ", ".join(people_mod.display_name(p) for p in targets) if assigned else "Anyone"
         title = f"{chore.get('emoji', '')} {chore['name']}".strip()
         message = f"Due now ({chore['due_time']}) · {names}"
         hass.bus.async_fire(EVENT_DUE, {"chore_id": chore["id"], "name": chore["name"], "due_time": chore["due_time"],

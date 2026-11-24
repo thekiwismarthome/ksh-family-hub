@@ -2,6 +2,7 @@ import { LitElement, html, css, nothing } from 'lit';
 import { enableSwipeClose } from './swipe.js';
 import { getActing, actingMsg, resolveActing } from './actor.js';
 import { EMOJIS } from '../modules/chores/templates.js';
+import { avatar, avatarCss, haPicture, shrinkImage } from './avatar.js';
 
 const LANGUAGES = [
   ['en', 'English'], ['es', 'Español'], ['fr', 'Français'], ['de', 'Deutsch'],
@@ -185,8 +186,8 @@ class KshHubSheets extends LitElement {
   _startPerson(p) {
     this._edit = p ? p.id : 'new';
     this._form = p
-      ? { name: p.name, role: p.role, emoji: p.emoji, pin: '', clearPin: false, notify: p.notify || '', user_id: p.user_id || '' }
-      : { name: '', role: 'child', emoji: '🙂', pin: '', clearPin: false, notify: '', user_id: '' };
+      ? { name: p.full_name || p.name, preferred: p.preferred_name || '', photo: p.photo || null, role: p.role, emoji: p.emoji, pin: '', clearPin: false, notify: p.notify || '', user_id: p.user_id || '' }
+      : { name: '', preferred: '', photo: null, role: 'child', emoji: '🙂', pin: '', clearPin: false, notify: '', user_id: '' };
     this._error = null;
   }
 
@@ -195,7 +196,10 @@ class KshHubSheets extends LitElement {
     if (!f.name.trim()) { this._error = 'Give them a name'; return; }
     if (f.pin && !/^\d{4}$/.test(f.pin)) { this._error = 'A PIN is four digits'; return; }
     const acting = resolveActing(this.hass, this._people, this._me);
-    const base = { name: f.name.trim(), role: f.role, emoji: f.emoji || '🙂', notify: f.notify.trim() || null, user_id: f.user_id || null, ...actingMsg(this.hass, acting) };
+    const base = {
+      name: f.name.trim(), preferred_name: f.preferred.trim() || null, photo: f.photo || null, role: f.role, emoji: f.emoji || '🙂',
+      notify: f.notify.trim() || null, user_id: f.user_id || null, ...actingMsg(this.hass, acting),
+    };
     let res;
     if (this._edit === 'new') res = await this._ws({ type: 'ksh_family_hub/people/add', ...base, ...(f.pin ? { pin: f.pin } : {}) });
     else res = await this._ws({ type: 'ksh_family_hub/people/update', person_id: this._edit, ...base, ...(f.pin ? { pin: f.pin } : f.clearPin ? { pin: null } : {}) });
@@ -370,7 +374,10 @@ class KshHubSheets extends LitElement {
       return html`
         ${this._head(this._edit === 'new' ? 'Add a person' : `Edit ${person?.name || ''}`, false, () => { this._edit = null; this._error = null; })}
         <div class="pform">
-          <label>Name<input maxlength="40" .value=${f.name} @input=${e => set({ name: e.target.value })} placeholder="e.g. Leo"></label>
+          <label>Name<input maxlength="40" .value=${f.name} @input=${e => set({ name: e.target.value })} placeholder="e.g. Leo Smith"></label>
+          <label>Preferred name <small>(optional)</small>
+            <input maxlength="40" .value=${f.preferred} @input=${e => set({ preferred: e.target.value })} placeholder="e.g. Leo"></label>
+          <p class="hint">${f.preferred.trim() ? `${f.preferred.trim()} is shown everywhere in the hub.` : 'Shown everywhere in the hub. Leave it blank to use the name above. It is never taken from the Home Assistant login.'}</p>
           <label>Role</label>
           <div class="seg">${Object.entries(label).map(([v, l]) => html`<button type="button" class=${f.role === v ? 'on' : ''} @click=${() => set({ role: v })}>${l}</button>`)}</div>
           <p class="hint">${{
@@ -386,8 +393,7 @@ class KshHubSheets extends LitElement {
           <p class="hint">${f.user_id ? `That login is always ${f.name.trim() || 'this person'}: chores are done as them on any device they sign in to, with no PIN needed.`
             : 'Children, grandparents and guests do not need a login. Pick one only if this person has their own Home Assistant account.'}</p>
           <label>Picture</label>
-          <div class="emojis"><input class="emoji-in" maxlength="8" .value=${f.emoji} @input=${e => set({ emoji: e.target.value })}>
-            ${EMOJIS.map(e => html`<button type="button" class=${e === f.emoji ? 'on' : ''} @click=${() => set({ emoji: e })}>${e}</button>`)}</div>
+          ${this._pictureEditor(f, set)}
           <label>PIN <small>(4 digits)</small>
             <input type="password" inputmode="numeric" maxlength="4" autocomplete="off" .value=${f.pin} placeholder=${person?.has_pin ? 'Type a new PIN to change it' : '4 digits'}
               @input=${e => set({ pin: e.target.value.replace(/\D/g, ''), clearPin: false })}></label>
@@ -411,13 +417,40 @@ class KshHubSheets extends LitElement {
       ${!this._people.length ? html`<p class="hint"><b>Start by adding yourself</b> and link your own login, then the children.</p>` : nothing}
       ${this._people.map(p => html`
         <button class="row" ?disabled=${!this._iAmAdult} @click=${() => this._startPerson(p)} style="--c:${p.color}">
-          <span class="ico" style="font-size:22px">${p.emoji}</span>
+          <span class="pic">${avatar(this.hass, p, 42)}</span>
           <span class="txt"><b>${p.name}</b><small>${label[p.role]}${p.user_id ? ` · ${this._logins.find(u => u.id === p.user_id)?.name || 'has a login'}` : ' · no login'}${p.has_pin ? ' · PIN' : ''}</small></span>
           ${this._iAmAdult ? html`<ha-icon class="chev" icon="mdi:chevron-right"></ha-icon>` : nothing}
         </button>`)}
       ${this._iAmAdult ? this._row('mdi:account-plus-outline', 'Add a person', () => this._startPerson(null), { color: '#4fd1a1' })
         : html`<p class="hint">Only an adult can add or change people.</p>`}
       ${this._error ? html`<p class="err">${this._error}</p>` : nothing}`;
+  }
+
+  /** Emoji, the Home Assistant picture of the linked login, or a picture of their own (shrunk to a small square). */
+  _pictureEditor(f, set) {
+    const mode = !f.photo ? 'emoji' : f.photo === 'ha' ? 'ha' : 'own';
+    const preview = { ...f, name: f.preferred.trim() || f.name, color: this._people.find(p => p.id === this._edit)?.color };
+    const haPic = haPicture(this.hass, { user_id: f.user_id });
+    const upload = async e => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      try { set({ photo: await shrinkImage(file) }); this._error = null; } catch (err) { this._error = err.message; }
+    };
+    return html`
+      <div class="picrow">${avatar(this.hass, preview, 64)}
+        <div class="seg">
+          <button type="button" class=${mode === 'emoji' ? 'on' : ''} @click=${() => set({ photo: null })}>Emoji</button>
+          <button type="button" class=${mode === 'ha' ? 'on' : ''} ?disabled=${!f.user_id} @click=${() => set({ photo: 'ha' })}>HA picture</button>
+          <button type="button" class=${mode === 'own' ? 'on' : ''} @click=${() => this.renderRoot.querySelector('#photo-in')?.click()}>My own</button>
+        </div>
+        <input id="photo-in" type="file" accept="image/*" hidden @change=${upload}>
+      </div>
+      ${mode === 'ha' && !haPic ? html`<p class="hint">Home Assistant has no picture for that login yet. Add one to the person in Settings → People, or choose another option.</p>` : nothing}
+      ${!f.user_id && mode !== 'own' ? html`<p class="hint">The Home Assistant picture needs a linked login.</p>` : nothing}
+      ${mode === 'own' ? html`<button type="button" class="linkbtn" @click=${() => set({ photo: null })}>Remove the picture</button>` : nothing}
+      ${mode === 'emoji' ? html`
+        <div class="emojis"><input class="emoji-in" maxlength="8" .value=${f.emoji} @input=${e => set({ emoji: e.target.value })}>
+          ${EMOJIS.map(e => html`<button type="button" class=${e === f.emoji ? 'on' : ''} @click=${() => set({ emoji: e })}>${e}</button>`)}</div>` : nothing}`;
   }
 
   _region() {
@@ -444,7 +477,7 @@ class KshHubSheets extends LitElement {
       ${this._error ? html`<p class="err">${this._error}</p>` : nothing}`;
   }
 
-  static styles = [css`
+  static styles = [avatarCss, css`
     :host { position: absolute; inset: 0; z-index: 30; pointer-events: none; display: block; }
     :host([sheet]) { pointer-events: auto; }
     * { box-sizing: border-box; }
@@ -517,6 +550,9 @@ class KshHubSheets extends LitElement {
     .seg { display: flex; border: 1px solid var(--hub-border); border-radius: 999px; overflow: hidden; }
     .seg button { flex: 1; background: transparent; border: none; padding: 9px 6px; font-weight: 700; color: var(--hub-muted); cursor: pointer; }
     .seg button.on { background: var(--hub-accent); color: var(--hub-accent-ink); }
+    .picrow { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+    .picrow .seg { flex: 1; min-width: 220px; }
+    .pic { flex: none; display: inline-flex; }
     .emojis { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
     .emojis button { width: 38px; height: 38px; font-size: 20px; border-radius: 12px; border: 1px solid transparent; background: var(--hub-surface); cursor: pointer; }
     .emojis button.on { border-color: var(--hub-accent); }

@@ -32,6 +32,9 @@ EVENT_PEOPLE_UPDATED = f"{DOMAIN}_people_updated"
 ROLES = ("adult", "child", "guest")
 COLOURS = ["#4fd1a1", "#f59a4d", "#6f80f2", "#e8639f", "#3db6cc", "#e2ac3f", "#cf6fb6", "#e46d5e"]
 NAME = vol.All(str, vol.Length(min=1, max=40))
+# A picture of their own: a small image sent as a data URL (the card shrinks it), or "ha" for the Home Assistant picture
+PHOTO = vol.Any(None, "ha", vol.All(str, vol.Length(max=80000), vol.Match(r"^data:image/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$")))
+PREFERRED = vol.Any(None, vol.All(str, vol.Length(max=40)))
 # Every command that acts for someone takes these: who, and the proof of their PIN (see ws_verify_pin)
 AS = {vol.Optional("as_person"): str, vol.Optional("pin_token"): str}
 PIN_TOKEN_DAYS = 60
@@ -45,6 +48,11 @@ def _now() -> str:
 
 def _hash_pin(pin: str, salt: str) -> str:
     return hashlib.sha256(f"{salt}:{pin}".encode()).hexdigest()
+
+
+def display_name(p: dict) -> str:
+    """The name shown everywhere: the preferred name when there is one, never the Home Assistant login's name."""
+    return (p.get("preferred_name") or "").strip() or p["name"]
 
 
 class PeopleStore:
@@ -66,7 +74,8 @@ class PeopleStore:
     @staticmethod
     def public(p: dict) -> dict:
         return {
-            "id": p["id"], "name": p["name"], "emoji": p.get("emoji", "🙂"), "color": p.get("color", COLOURS[0]),
+            "id": p["id"], "name": display_name(p), "full_name": p["name"], "preferred_name": p.get("preferred_name") or "",
+            "emoji": p.get("emoji", "🙂"), "color": p.get("color", COLOURS[0]), "photo": p.get("photo"),
             "role": p["role"], "user_id": p.get("user_id"), "has_pin": bool(p.get("pin_hash")),
             "notify": p.get("notify"),
         }
@@ -82,11 +91,12 @@ class PeopleStore:
     async def by_user(self, user_id: str) -> dict | None:
         return next((p for p in await self.load() if p.get("user_id") == user_id), None)
 
-    async def add(self, name: str, role: str, emoji: str, pin: str | None, notify: str | None, user_id: str | None = None) -> dict:
+    async def add(self, name: str, role: str, emoji: str, pin: str | None, notify: str | None, user_id: str | None = None,
+                  preferred: str | None = None, photo: str | None = None) -> dict:
         people = await self.load()
         person = {
             "id": uuid.uuid4().hex, "name": name.strip(), "emoji": emoji or "🙂", "color": COLOURS[len(people) % len(COLOURS)],
-            "role": role, "user_id": user_id or None, "pin_salt": None, "pin_hash": None, "notify": notify or None, "created_at": _now(),
+            "role": role, "user_id": user_id or None, "preferred_name": (preferred or "").strip(), "photo": photo or None, "pin_salt": None, "pin_hash": None, "notify": notify or None, "created_at": _now(),
         }
         self.set_pin(person, pin)
         people.append(person)
@@ -256,6 +266,8 @@ async def ws_users(hass, connection, msg) -> None:
     vol.Optional("pin"): vol.Any(None, vol.All(str, vol.Match(r"^\d{4}$"))),
     vol.Optional("notify"): vol.Any(None, vol.All(str, vol.Match(r"^notify\.[a-z0-9_]+$"))),
     vol.Optional("user_id"): vol.Any(None, str),
+    vol.Optional("preferred_name"): PREFERRED,
+    vol.Optional("photo"): PHOTO,
 })
 @websocket_api.async_response
 async def ws_add(hass, connection, msg) -> None:
@@ -269,7 +281,8 @@ async def ws_add(hass, connection, msg) -> None:
     if problem:
         connection.send_error(msg["id"], "invalid_format", problem)
         return
-    person = await ps.add(msg["name"], msg.get("role", "child"), msg.get("emoji", "🙂"), msg.get("pin"), msg.get("notify"), msg.get("user_id"))
+    person = await ps.add(msg["name"], msg.get("role", "child"), msg.get("emoji", "🙂"), msg.get("pin"), msg.get("notify"), msg.get("user_id"),
+                          msg.get("preferred_name"), msg.get("photo"))
     connection.send_result(msg["id"], {"person": ps.public(person)})
 
 
@@ -283,6 +296,8 @@ async def ws_add(hass, connection, msg) -> None:
     vol.Optional("pin"): vol.Any(None, vol.All(str, vol.Match(r"^\d{4}$"))),
     vol.Optional("notify"): vol.Any(None, vol.All(str, vol.Match(r"^notify\.[a-z0-9_]+$"))),
     vol.Optional("user_id"): vol.Any(None, str),
+    vol.Optional("preferred_name"): PREFERRED,
+    vol.Optional("photo"): PHOTO,
 })
 @websocket_api.async_response
 async def ws_update(hass, connection, msg) -> None:
@@ -305,7 +320,7 @@ async def ws_update(hass, connection, msg) -> None:
             connection.send_error(msg["id"], "invalid_format", problem)
             return
         person["user_id"] = msg["user_id"] or None
-    for key in ("name", "role", "emoji", "notify"):
+    for key in ("name", "role", "emoji", "notify", "preferred_name", "photo"):
         if key in msg:
             person[key] = msg[key].strip() if isinstance(msg[key], str) else msg[key]
     if "pin" in msg:

@@ -1,4 +1,5 @@
 import { LitElement, html, css, nothing } from 'lit';
+import { avatar, avatarCss, faceContent } from '../../hub/avatar.js';
 import { enableSwipeClose } from '../../hub/swipe.js';
 import { resolveActing, actingMsg, setToken } from '../../hub/actor.js';
 import { money, parseMoney, moneyInput } from '../../hub/money.js';
@@ -251,9 +252,7 @@ class KshFinanceModule extends LitElement {
   }
 
   _face(p) {
-    const st = p.user_id ? Object.values(this.hass?.states || {}).find(x => x.entity_id?.startsWith('person.') && x.attributes?.user_id === p.user_id) : null;
-    const pic = st?.attributes?.entity_picture;
-    return html`<span class="face" style="--p:${p.color}">${pic ? html`<img src=${pic} alt=${p.name} draggable="false">` : p.emoji}</span>`;
+    return html`<span class="face" style="--p:${p.color}">${faceContent(this.hass, p)}</span>`;
   }
 
   _overview() {
@@ -306,7 +305,7 @@ class KshFinanceModule extends LitElement {
     return html`
       <button class="row ${e.void ? 'void' : ''}" @click=${() => { this._sheet = { type: 'detail', entry: e }; }}>
         <span class="em">${e.emoji || '💰'}</span>
-        <span class="txt"><b>${e.note}</b><small>${p ? `${p.emoji} ${p.name} · ` : ''}${this._when(e.at)} · ${this._entryParts(e)}</small></span>
+        <span class="txt"><b>${e.note}</b><small>${p ? `${p.name} · ` : ''}${this._when(e.at)} · ${this._entryParts(e)}</small></span>
         ${e.void ? html`<span class="pill">Undone</span>` : this._entryAmount(e)}
       </button>`;
   }
@@ -320,7 +319,7 @@ class KshFinanceModule extends LitElement {
       ${this._isAdult && people.length > 1 ? html`
         <div class="chips" role="radiogroup" aria-label="Show for">
           <button class="chip ${this._who === 'all' ? 'on' : ''}" @click=${() => { this._who = 'all'; }}>Everyone</button>
-          ${people.map(p => html`<button class="chip ${this._who === p.id ? 'on' : ''}" @click=${() => { this._who = p.id; }}>${p.emoji} ${p.name}</button>`)}
+          ${people.map(p => html`<button class="chip ${this._who === p.id ? 'on' : ''}" @click=${() => { this._who = p.id; }}>${avatar(this.hass, p, 22)}${p.name}</button>`)}
         </div>` : nothing}
       ${list.length ? html`<div class="list">${list.map(e => this._row(e, { withWho: this._isAdult && !filter }))}</div>`
         : html`<div class="empty"><span>🧾</span><p>No money in or out yet.</p></div>`}`;
@@ -346,7 +345,7 @@ class KshFinanceModule extends LitElement {
 
   _whoChips(current) {
     return html`<div class="chips">${this._kids.map(p => html`
-      <button type="button" class="chip ${current === p.id ? 'on' : ''}" @click=${() => this._set('person', p.id)}>${p.emoji} ${p.name}</button>`)}</div>`;
+      <button type="button" class="chip ${current === p.id ? 'on' : ''}" @click=${() => this._set('person', p.id)}>${avatar(this.hass, p, 22)}${p.name}</button>`)}</div>`;
   }
 
   _acctSeg(current, field) {
@@ -413,7 +412,7 @@ class KshFinanceModule extends LitElement {
     const by = this._person(e.by);
     return html`
       <div class="detail">
-        <div class="dh"><span class="em big">${e.emoji || '💰'}</span><div><h2>${e.note}</h2><p class="muted">${p?.emoji || ''} ${p?.name || ''} · ${this._when(e.at)}</p></div></div>
+        <div class="dh"><span class="em big">${e.emoji || '💰'}</span><div><h2>${e.note}</h2><p class="muted">${p?.name || ''} · ${this._when(e.at)}</p></div></div>
         <div class="facts">
           ${e.tx.map(t => html`<div class="fact"><span>${t.account === 'cash' ? '💵 Cash' : '🏦 Bank'}</span><b class="${t.amount < 0 ? 'out' : 'in'}">${this._m(t.amount, { sign: true })}</b></div>`)}
           ${by ? html`<div class="fact"><span>Entered by</span><b>${by.name}</b></div>` : e.by === 'system' ? html`<div class="fact"><span>Entered by</span><b>Pocket money</b></div>` : nothing}
@@ -433,7 +432,7 @@ class KshFinanceModule extends LitElement {
       </form>`;
   }
 
-  static styles = css`
+  static styles = [avatarCss, css`
     :host { display: block; position: relative; overflow: hidden; color: var(--hub-text); --fin: #4a86f0; }
     * { box-sizing: border-box; }
     button, input, select { font: inherit; color: inherit; }
@@ -512,7 +511,7 @@ class KshFinanceModule extends LitElement {
     .detail .dh { display: flex; align-items: center; gap: 12px; } .detail h2 { margin: 0; font-size: 20px; }
     .em.big { font-size: 38px; width: 56px; height: 56px; display: inline-flex; align-items: center; justify-content: center; border-radius: 18px; background: color-mix(in srgb, var(--fin) 20%, transparent); }
     .facts { display: grid; gap: 8px; margin: 14px 0; } .fact { display: flex; justify-content: space-between; padding: 10px 12px; background: var(--hub-surface-2); border-radius: 12px; }
-  `;
+  `];
 }
 
 customElements.define('ksh-finance-module', KshFinanceModule);

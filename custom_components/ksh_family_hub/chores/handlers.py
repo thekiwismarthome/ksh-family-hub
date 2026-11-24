@@ -264,13 +264,19 @@ async def ws_delete_routine(hass, connection, msg) -> None:
 
 @websocket_api.websocket_command({
     vol.Required("type"): f"{DOMAIN}/routines/step", vol.Required("routine_id"): str, vol.Required("step_id"): str,
-    vol.Required("done"): bool, **DAY, **AS,
+    vol.Required("done"): bool, vol.Optional("for_person"): str, **DAY, **AS,
 })
 @websocket_api.async_response
 async def ws_routine_step(hass, connection, msg) -> None:
+    # An adult can tick a routine for a child (the progress and the points are the child's)
+    target = await people_mod.store(hass).get(msg["for_person"]) if msg.get("for_person") else None
+    if msg.get("for_person") and target is None:
+        connection.send_error(msg["id"], "not_found", "That person no longer exists")
+        return
+
     def action(d, a):
-        result = logic.routine_step(d, msg["routine_id"], _day(msg), a, msg["step_id"], msg["done"], _now())
-        result["celebration"] = logic.celebration_for(d, a["id"])
+        result = logic.routine_step(d, msg["routine_id"], _day(msg), a, msg["step_id"], msg["done"], _now(), target)
+        result["celebration"] = logic.celebration_for(d, result["person_id"])
         return result
     await _mutate(hass, connection, msg, action)
 

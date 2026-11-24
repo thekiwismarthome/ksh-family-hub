@@ -1,6 +1,15 @@
 # Release notes
 
-Versions now follow the date: **YEAR.MONTH.RELEASE**, with a `-betaN` suffix while in beta (this one is 2026.11.1-beta6, after 0.1.0-beta.5).
+Versions now follow the date: **YEAR.MONTH.RELEASE**, with a `-betaN` suffix while in beta (the first one is 2026.11.1-beta6, after 0.1.0-beta.5).
+
+## 2026.11.1-beta7
+
+- **Preferred name and pictures for people.** Each person can have a preferred name (shown everywhere, never taken from the Home Assistant login) and a picture: an emoji, the Home Assistant picture of their linked login, or a photo of their own (shrunk to a small square on the device). The picture shows in the Chores and Calendar filters, on every chore, on calendar events, in Finance and in the people lists.
+- **New logo**: the house with "Family Hub" under it, in the image itself.
+- **Chores show who they are for**: the faces of the assigned people (or of who did it) sit at the left of each chore, with their colour as a stripe.
+- **Routines are listed per person.** A routine for several children is one card for each child, under their name, each with its own progress and points. An adult can open a child's card and tick steps for them. (Assign a routine to several people as before; only the view changed.)
+- **Calendar**: the month and year are shown above the calendar; every day with something on it shows it (event emojis, and the number of chores) on a phone too; chores now show in the month view by default; the **Open chores** button in a chore's popup works.
+- **Kids screen** (new card `custom:ksh-family-hub-kids-card`): a big, colourful chores, routines and points screen for one child, made for a bedside display (Kiosk Satellite, Fully Kiosk, a wall tablet). Tick chores, go through a routine one step at a time, see stars, pocket money progress and rewards to ask for. Four looks (galaxy, candy, ocean, jungle). A child with a PIN is asked for it once on a device that is not signed in as them. Copy the card from Chores settings → Kids screen.
 
 ## 2026.11.1-beta6
 

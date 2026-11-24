@@ -1,5 +1,6 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { PALETTES } from './hub-styles.js';
+import { avatar, avatarCss } from './avatar.js';
 import { ITEMS, orderItems } from './modules.js';
 
 const PARTS = ['shopping', 'meals', 'chores', 'calendar', 'finance'];
@@ -91,7 +92,7 @@ class KshHubSettings extends LitElement {
       <h3>Who can see what</h3>
       <section class="card">
         <div class="chips">
-          ${people.map(p => html`<button class="chip ${p.id === who.id ? 'on' : ''}" @click=${() => { this._who = p.id; }}>${p.emoji} ${p.name}</button>`)}
+          ${people.map(p => html`<button class="chip ${p.id === who.id ? 'on' : ''}" @click=${() => { this._who = p.id; }}>${avatar(this.hass, p, 22)}${p.name}</button>`)}
         </div>
         ${items.map(item => {
           const on = !blocked.includes(item.id);
@@ -179,7 +180,7 @@ class KshHubSettings extends LitElement {
       </div>`;
   }
 
-  static styles = [css`
+  static styles = [avatarCss, css`
     .chips { display: flex; gap: 6px; flex-wrap: wrap; padding: 12px 12px 6px; }
     .chip { border: 1px solid var(--hub-border); background: transparent; color: var(--hub-muted); border-radius: 999px; padding: 6px 14px; font-weight: 600; font-size: 13.5px; cursor: pointer; }
     .chip.on { background: var(--hub-accent); color: var(--hub-accent-ink); border-color: transparent; }

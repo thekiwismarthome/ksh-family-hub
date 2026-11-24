@@ -14,6 +14,7 @@ import './modules/shopping/shopping-list-manager-card.js'; // <ksh-shopping-modu
 import './modules/chores/ksh-chores-module.js';           // <ksh-chores-module>
 import './modules/calendar/ksh-calendar-module.js';       // <ksh-calendar-module>
 import './modules/finance/ksh-finance-module.js';         // <ksh-finance-module>
+import './kids/ksh-kids-card.js';                      // <ksh-family-hub-kids-card>, the kids' screen
 
 const ROUTE_KEY = 'ksh_hub_route';
 const THEME_KEY = 'ksh_hub_theme';
@@ -525,6 +526,7 @@ export class KshFamilyHubCard extends LitElement {
           <div class="module" ?hidden=${route !== 'calendar'}>
             <ksh-calendar-module id="mod-calendar" hub-mode .hass=${this.hass} .modules=${this._info.modules}
               @hub-sheet=${e => { this._sheet = e.detail.sheet; }}
+              @hub-navigate=${this._onNavigate}
               @module-view-changed=${e => this._onModuleView('calendar', e)}></ksh-calendar-module>
           </div>` : nothing}
         ${this._visited.has('finance') && this._info.modules.finance ? html`

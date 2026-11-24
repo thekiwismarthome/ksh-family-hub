@@ -368,16 +368,21 @@ def run_key(routine_id: str, day: date, person_id: str) -> str:
     return f"{routine_id}:{day.isoformat()}:{person_id}"
 
 
-def routine_step(data: dict, routine_id: str, day: date, actor: dict, step_id: str, done: bool, now: str) -> dict:
+def routine_step(data: dict, routine_id: str, day: date, actor: dict, step_id: str, done: bool, now: str,
+                 target: dict | None = None) -> dict:
+    """Tick (or untick) a step of a routine. `target` is the person it is for when an adult ticks it for someone else."""
     routine = _get_routine(data, routine_id)
-    if not routine_for(routine, actor):
+    who = target or actor
+    if who["id"] != actor["id"] and actor["role"] != ROLE_ADULT:
+        raise ChoreError("Only an adult can tick a routine for someone else", "unauthorized")
+    if not routine_for(routine, who):
         raise ChoreError("That routine is not assigned to you", "unauthorized")
     todays = steps_for_day(routine, day)
     if step_id not in {s["id"] for s in routine["steps"]}:
         raise ChoreError("Unknown step", "not_found")
     if step_id not in {s["id"] for s in todays}:
         raise ChoreError("That step is not part of the routine on this day")
-    key = run_key(routine_id, day, actor["id"])
+    key = run_key(routine_id, day, who["id"])
     run = data["runs"].setdefault(key, {"steps": [], "completed_at": None})
     if done and step_id not in run["steps"]:
         run["steps"].append(step_id)
@@ -386,9 +391,9 @@ def routine_step(data: dict, routine_id: str, day: date, actor: dict, step_id: s
     awarded = False
     if todays and all(s["id"] in run["steps"] for s in todays) and not run["completed_at"]:
         run["completed_at"] = now
-        awarded = award(data, f"routine:{key}", actor["id"], routine.get("points", 0),
+        awarded = award(data, f"routine:{key}", who["id"], routine.get("points", 0),
                         f"{routine.get('emoji', '')} {routine['name']}".strip(), now, kind="routine")
-    return {"steps": list(run["steps"]), "completed": bool(run["completed_at"]), "awarded": awarded}
+    return {"steps": list(run["steps"]), "completed": bool(run["completed_at"]), "awarded": awarded, "person_id": who["id"]}
 
 
 def day_runs(data: dict, day: date) -> dict[str, dict]:

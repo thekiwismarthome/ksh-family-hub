@@ -16,11 +16,12 @@ Recipes, meal planning and shopping lists for Home Assistant, in **one** integra
 | **Home** | Today's meals, open shopping items, shortcuts, hub settings |
 | **Shopping** | Shopping List Manager: lists, catalogue, supermarkets, households |
 | **Chores** | Chores for the family: assign, repeat, reminders; children do, adults approve; routines with per-day steps; points |
+| **Kids screen** | A separate big, colourful card for one child (`custom:ksh-family-hub-kids-card`, `person: Mia`) for bedside displays: chores, routines, stars and rewards |
 | **Finance** | Pocket money: a Cash and a Bank account for each child, what it was spent on, points-to-pocket-money rules |
 | **Calendar** | Family calendar: school, sport, appointments, reminders, birthdays; month/week/day/agenda; chores and Home Assistant calendars alongside |
 | **Cards** | Loyalty cards (part of Shopping) |
 | **Meals** | Everything Recipe Manager does: recipes, importers, meal planner, timers |
-| Wishlist, Finances, Medicine, Reminders, Birthdays, Expiry, Routines, Timetables, Chat, Location | Placeholders for what comes next |
+| Wishlist, Medicine, Reminders, Birthdays, Expiry, Timetables, Chat, Location | Placeholders for what comes next |
 
 **Phone:** a floating bottom bar (Home, Shopping, Meals, Wishlist, More) and a *More* sheet with every section.
 **Tablet / desktop (≥ 700 px wide):** a slim icon rail down the left with every section.

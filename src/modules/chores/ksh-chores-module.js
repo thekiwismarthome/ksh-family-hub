@@ -5,6 +5,7 @@ import { loadEvents, timeLabel, iso as isoOf } from '../calendar/data.js';
 import { celebrate, CELEBRATIONS, DEFAULT_CELEBRATION } from '../../hub/celebrate.js';
 import { CHORE_TEMPLATES, ROUTINE_TEMPLATES, REWARD_TEMPLATES, EMOJIS, DAY_NAMES } from './templates.js';
 import { money, parseMoney, moneyInput } from '../../hub/money.js';
+import { avatar, avatarCss } from '../../hub/avatar.js';
 
 const ACCENT = '#3db6cc';
 
@@ -370,10 +371,13 @@ class KshChoresModule extends LitElement {
     if (res) this._closeSheet();
   }
 
-  _run(routineId) { return this._state.runs[`${routineId}:${this._acting || `admin:${this.hass.user.id}`}`] || { steps: [], completed: false }; }
+  get _meId() { return this._acting || `admin:${this.hass.user.id}`; }
 
-  async _toggleStep(routine, stepId, done) {
-    const res = await this._call('routines/step', { routine_id: routine.id, step_id: stepId, done });
+  _run(routineId, personId = this._meId) { return this._state.runs[`${routineId}:${personId}`] || { steps: [], completed: false }; }
+
+  async _toggleStep(routine, stepId, done, personId = this._meId) {
+    // An adult ticking for a child sends whose routine it is; the progress and the points are the child's
+    const res = await this._call('routines/step', { routine_id: routine.id, step_id: stepId, done, ...(personId !== this._meId ? { for_person: personId } : {}) });
     if (res?.awarded) { this._sheet = { type: 'celebrate', routine }; celebrate(this, res.celebration, { big: true }); }
   }
 
@@ -426,7 +430,7 @@ class KshChoresModule extends LitElement {
       <h3>Celebration</h3>
       ${this._isAdult && this._people.length > 1 ? html`
         <div class="chips" role="radiogroup" aria-label="Choose for">
-          ${this._people.filter(p => p.role !== 'guest').map(p => html`<button class="chip ${p.id === who.id ? 'on' : ''}" @click=${() => { this._celFor = p.id; }}>${p.emoji} ${p.name}</button>`)}
+          ${this._people.filter(p => p.role !== 'guest').map(p => html`<button class="chip ${p.id === who.id ? 'on' : ''}" @click=${() => { this._celFor = p.id; }}>${avatar(this.hass, p, 22)}${p.name}</button>`)}
         </div>` : nothing}
       <div class="card cels" role="radiogroup" aria-label="Celebration for ${who.name}">
         ${CELEBRATIONS.map(c => html`
@@ -441,6 +445,31 @@ class KshChoresModule extends LitElement {
         Tap one to choose it and see it.
         ${style !== 'off' ? html`<button class="link" @click=${() => celebrate(this, style, { big: true, force: true })}>Play again</button>` : nothing}
         It stays still on a device that asks for reduced motion.</p>`;
+  }
+
+  async _copyKids(person) {
+    const text = `type: custom:ksh-family-hub-kids-card\nperson: ${person.name}`;
+    try { await navigator.clipboard.writeText(text); this._say(`Copied. Paste it into a dashboard card for ${person.name}.`); }
+    catch { this._say(text.replace('\n', ' / ')); }
+  }
+
+  /** The kids' screen: a separate card for a bedside display, one per child */
+  _kidsSection() {
+    if (!this._isAdult) return nothing;
+    const kids = this._people.filter(p => p.role === 'child');
+    return html`
+      <h3>Kids screen</h3>
+      <div class="card">
+        ${kids.length ? kids.map(p => html`
+          <button class="item btn" @click=${() => this._copyKids(p)}>
+            ${avatar(this.hass, p, 38)}
+            <span class="txt"><b>${p.name}</b><small>Copy the card for ${p.name}'s screen</small></span>
+            <ha-icon class="chev" icon="mdi:content-copy"></ha-icon>
+          </button>`) : html`<div class="item small"><span class="txt"><small>Add a child under People &amp; guests first.</small></span></div>`}
+      </div>
+      <p class="muted">A big, colourful chores, routines and points screen for one child, made for a bedside display (Kiosk Satellite, Fully Kiosk or a wall tablet).
+        In the dashboard, add a <b>Manual</b> card and paste what you copied, or choose <b>KSH Family Hub: Kids view</b> and set the person.
+        Add <code>style: galaxy</code> (or <code>candy</code>, <code>ocean</code>, <code>jungle</code>) to change the look.</p>`;
   }
 
   _startPin() { this._pin = ''; this._pin2 = ''; this._sheet = { type: 'setpin' }; }
@@ -507,7 +536,7 @@ class KshChoresModule extends LitElement {
   }
 
   _avatar(p, size = '') {
-    return html`<span class="avatar ${size}" style="--c:${p?.color || ACCENT}">${p?.emoji || '🙂'}</span>`;
+    return avatar(this.hass, p || { color: ACCENT }, size === 'lg' ? 46 : 38);
   }
 
   _personRow(p, onClick, right = nothing) {
@@ -550,7 +579,7 @@ class KshChoresModule extends LitElement {
     const waiting = this._isAdult ? s.pending.map(p => ({ ...p, chore: this._chore(p.chore_id) })).filter(p => p.chore) : [];
     const date = new Date().toLocaleDateString(this.hass.locale?.language || undefined, { weekday: 'long', day: 'numeric', month: 'long' });
     const showChores = seg === 'all' || seg === 'chores';
-    const routines = this._routinesToday();
+    const routines = this._routineSlots({ todayOnly: true });
     return html`
       <p class="date">${date}</p>
       <div class="seg tabs" role="tablist" aria-label="Show">
@@ -560,13 +589,14 @@ class KshChoresModule extends LitElement {
       ${showChores && this._isAdult && this._people.length > 1 ? html`
         <div class="chips" role="radiogroup" aria-label="Show chores for">
           <button class="chip ${this._filter === 'all' ? 'on' : ''}" @click=${() => { this._filter = 'all'; }}>Everyone</button>
-          ${this._people.map(p => html`<button class="chip ${this._filter === p.id ? 'on' : ''}" @click=${() => { this._filter = p.id; }}>${p.emoji} ${p.name}</button>`)}
+          ${this._people.map(p => html`<button class="chip ${this._filter === p.id ? 'on' : ''}" @click=${() => { this._filter = p.id; }}>${avatar(this.hass, p, 22)}${p.name}</button>`)}
         </div>` : nothing}
 
       ${showChores && waiting.length ? html`
         <h3>Waiting for approval</h3>
         <div class="card">${waiting.map(w => html`
           <div class="item">
+            ${this._faces([this._person(w.done_by)].filter(Boolean))}
             <span class="emoji">${w.chore.emoji}</span>
             <span class="txt"><b>${w.chore.name}</b><small>${this._person(w.done_by)?.name || 'Someone'} · ${w.date === s.today ? 'today' : w.date} · +${w.chore.points} ★</small></span>
             <button class="mini ok" @click=${() => this._approve(w)} aria-label="Approve"><ha-icon icon="mdi:check"></ha-icon>Approve</button>
@@ -578,7 +608,7 @@ class KshChoresModule extends LitElement {
         <div class="card">${late.map(i => this._item(i))}</div>` : nothing}
 
       ${seg === 'routines' || seg === 'all' ? (routines.length ? html`
-        <h3>Routines</h3>${routines.map(r => this._routineCard(r, { compact: true }))}`
+        <h3>Routines</h3>${this._routineGroups(routines, { compact: true })}`
         : seg === 'routines' ? html`<div class="empty"><span>☀️</span><p>No routines for you today.</p></div>` : nothing) : nothing}
 
       ${showChores ? html`
@@ -601,36 +631,81 @@ class KshChoresModule extends LitElement {
         <div class="item small">
           <span class="emoji" style="background:color-mix(in srgb, ${e.color} 22%, transparent)">${e.emoji}</span>
           <span class="txt"><b>${e.title}</b>
-            <small>${timeLabel(e)}${e.location ? ` · ${e.location}` : ''}${(e.people || []).length ? ` · ${e.people.map(id => this._person(id)?.emoji || '').join(' ')}` : ''}</small></span>
+            <small>${timeLabel(e)}${e.location ? ` · ${e.location}` : ''}</small></span>
+          ${(e.people || []).length ? html`<span class="faces">${e.people.map(id => this._person(id)).filter(Boolean).map(p => avatar(this.hass, p, 28))}</span>` : nothing}
         </div>`)}</div>`
         : html`<div class="empty"><span>🗓️</span><p>Nothing in the calendar today.</p></div>`}
       <button class="link" @click=${() => this.dispatchEvent(new CustomEvent('hub-navigate', { detail: { id: 'calendar' }, bubbles: true, composed: true }))}>
         <ha-icon icon="mdi:calendar-month-outline"></ha-icon>Open the calendar</button>`;
   }
 
-  // Routines this person does today (a routine with no step today is left out)
-  _routinesToday() {
-    const mineOnly = r => this._isAdult || !(r.assignees || []).length ? (this._isAdult || this._role === 'child') : r.assignees.includes(this._acting);
-    return this._state.routines.filter(r => r.active !== false && mineOnly(r) && this._stepsToday(r).length)
-      .filter(r => !this._isAdult || this._filter === 'all' || !(r.assignees || []).length || r.assignees.includes(this._filter));
+  /**
+   * One entry per routine *and person*: a routine for two children is two cards, each with its own progress.
+   * An adult sees everyone's (the person filter narrows it); a child sees only their own.
+   * A routine nobody is assigned to is for whoever is using the app.
+   */
+  _routineSlots({ todayOnly = false } = {}) {
+    const me = this._person(this._acting) || { id: this._meId, name: this.hass.user?.name || 'You', emoji: '🙂', color: ACCENT, role: 'adult' };
+    const out = [];
+    for (const r of this._state.routines) {
+      if (r.active === false) continue;
+      if (todayOnly && !this._stepsToday(r).length) continue;
+      const who = (r.assignees || []).map(id => this._person(id)).filter(Boolean);
+      let people = who.length ? who : [me];
+      if (!this._isAdult) people = people.filter(p => p.id === me.id);
+      else if (this._filter !== 'all') people = people.filter(p => p.id === this._filter);
+      if (!who.length && !this._isAdult && this._role === 'guest') continue;
+      for (const p of people) out.push({ r, p });
+    }
+    return out;
+  }
+
+  /** Slots grouped under each person, in the order of the people list (a heading only when there is more than one person) */
+  _slotGroups(slots) {
+    const order = this._people.map(p => p.id);
+    const groups = [];
+    for (const s of slots) {
+      let g = groups.find(x => x.p.id === s.p.id);
+      if (!g) { g = { p: s.p, slots: [] }; groups.push(g); }
+      g.slots.push(s);
+    }
+    groups.sort((a, b) => order.indexOf(a.p.id) - order.indexOf(b.p.id));
+    return groups;
+  }
+
+  _routineGroups(slots, opts) {
+    const groups = this._slotGroups(slots);
+    const heads = groups.length > 1;
+    return groups.map(g => html`
+      ${heads ? html`<h4 class="pgroup">${avatar(this.hass, g.p, 28)}<span>${g.p.name}</span></h4>` : nothing}
+      ${g.slots.map(sl => this._routineCard(sl.r, sl.p, { ...opts, who: !heads }))}`);
   }
 
   _stepsToday(r) { return r.steps.filter(st => !(st.days || []).length || st.days.includes(todayWeekday())); }
+
+  /** The faces (picture or emoji, in their colour) of who a chore belongs to. Nobody assigned means anyone. */
+  _faces(people) {
+    return people.length
+      ? html`<span class="faces">${people.map(p => avatar(this.hass, p, 34))}</span>`
+      : html`<span class="faces everyone" title="Anyone"><ha-icon icon="mdi:account-group-outline"></ha-icon></span>`;
+  }
 
   _item(i) {
     const c = i.chore;
     const assignees = (c.assignees || []).map(id => this._person(id)).filter(Boolean);
     const overdue = this._overdue(c, i);
+    const faces = ['done', 'approved'].includes(i.status) ? [this._person(i.done_by)].filter(Boolean) : assignees;
     const mine = i.done_by === this._acting;
     const canUndo = i.status === 'done' ? (this._isAdult || mine) : (i.status === 'approved' && this._isAdult);
     return html`
-      <div class="item ${i.status}">
+      <div class="item ${i.status} ${faces.length ? 'has-who' : ''}" style="--who:${faces[0]?.color || 'transparent'}">
+        ${this._faces(faces)}
         <span class="emoji">${c.emoji}</span>
         <span class="txt">
           <b>${c.name}</b>
           <small>
-            ${['done', 'approved'].includes(i.status) ? html`${this._person(i.done_by)?.emoji || ''} ${this._person(i.done_by)?.name || 'Someone'} did it`
-              : assignees.length ? assignees.map(p => p.emoji).join(' ') + ' ' + assignees.map(p => p.name).join(', ') : 'Anyone'}
+            ${['done', 'approved'].includes(i.status) ? html`${this._person(i.done_by)?.name || 'Someone'} did it`
+              : assignees.length ? assignees.map(p => p.name).join(', ') : 'Anyone'}
             ${i.date < todayIso() ? html` · <span class="late">${this._dateLabel(i.date)}</span>`
               : c.due_time ? html` · <span class=${overdue ? 'late' : ''}>${overdue ? 'Was due' : 'Due'} ${c.due_time}</span>` : nothing}
             ${c.points ? html` · +${c.points} ★` : nothing}
@@ -658,10 +733,11 @@ class KshChoresModule extends LitElement {
       ${chores.length ? html`<div class="card">${chores.map(c => {
         const who = (c.assignees || []).map(id => this._person(id)).filter(Boolean);
         return html`
-          <button class="item btn" @click=${() => this._isAdult && this._editChore(c)} ?disabled=${!this._isAdult}>
+          <button class="item btn ${who.length ? 'has-who' : ''}" style="--who:${who[0]?.color || 'transparent'}" @click=${() => this._isAdult && this._editChore(c)} ?disabled=${!this._isAdult}>
+            ${this._faces(who)}
             <span class="emoji">${c.emoji}</span>
             <span class="txt"><b>${c.name}</b>
-              <small>${who.length ? who.map(p => p.emoji + ' ' + p.name).join(', ') : 'Anyone'} · ${this._recurrenceText(c.recurrence)}${c.due_time ? ` · ${c.due_time}` : ''}</small></span>
+              <small>${who.length ? who.map(p => p.name).join(', ') : 'Anyone'} · ${this._recurrenceText(c.recurrence)}${c.due_time ? ` · ${c.due_time}` : ''}</small></span>
             <span class="pts">${c.points} ★</span>
             ${this._isAdult ? html`<ha-icon class="chev" icon="mdi:chevron-right"></ha-icon>` : nothing}
           </button>`; })}</div>`
@@ -671,19 +747,18 @@ class KshChoresModule extends LitElement {
 
   // -- Routines --
 
-  _routineCard(r, { compact = false } = {}) {
-    const run = this._run(r.id);
+  _routineCard(r, p, { compact = false, who: showWho = true } = {}) {
+    const run = this._run(r.id, p.id);
     const steps = this._stepsToday(r);
     const done = steps.filter(st => run.steps.includes(st.id)).length;
-    const can = this._isAdult || !(r.assignees || []).length ? true : r.assignees.includes(this._acting);
-    const who = (r.assignees || []).map(id => this._person(id)).filter(Boolean);
+    const can = this._isAdult || p.id === this._meId;
     const none = !steps.length;
     return html`
-      <div class="card routine ${run.completed ? 'finished' : ''}">
-        <button class="rhead" @click=${() => { this._sheet = { type: 'run', id: r.id }; }} ?disabled=${!can || none}>
-          <span class="emoji big">${r.emoji}</span>
-          <span class="txt"><b>${r.name}</b>
-            <small>${none ? 'No steps today' : `${steps.length} step${steps.length === 1 ? '' : 's'} today`} · +${r.points} ★ · ${who.length ? who.map(p => p.emoji + ' ' + p.name).join(', ') : 'Anyone'}</small></span>
+      <div class="card routine ${run.completed ? 'finished' : ''}" style="--who:${p.color}">
+        <button class="rhead" @click=${() => { this._sheet = { type: 'run', id: r.id, person: p.id }; }} ?disabled=${!can || none}>
+          ${showWho ? avatar(this.hass, p, 44) : html`<span class="emoji big">${r.emoji}</span>`}
+          <span class="txt"><b>${showWho ? `${r.emoji} ` : ''}${r.name}</b>
+            <small>${showWho ? `${p.name} · ` : ''}${none ? 'No steps today' : `${steps.length} step${steps.length === 1 ? '' : 's'} today`} · +${r.points} ★</small></span>
           <span class="pill ${run.completed ? 'okp' : ''}">${none ? '—' : run.completed ? '✓ Done' : done ? `${done}/${steps.length}` : 'Start'}</span>
         </button>
         <div class="bar"><i style="width:${steps.length ? (done / steps.length) * 100 : 0}%"></i></div>
@@ -692,15 +767,18 @@ class KshChoresModule extends LitElement {
   }
 
   _routines() {
-    const all = this._state.routines;
-    const mineOnly = r => this._isAdult || !(r.assignees || []).length ? (this._isAdult || this._role === 'child') : r.assignees.includes(this._acting);
-    const list = all.filter(mineOnly);
+    const slots = this._routineSlots();
     return html`
       <div class="head">
         <h3 class="inline">Routines</h3>
         ${this._isAdult ? html`<button class="primary" @click=${() => { this._sheet = { type: 'routine-pick' }; }}><ha-icon icon="mdi:plus"></ha-icon>Add routine</button>` : nothing}
       </div>
-      ${list.length ? list.map(r => this._routineCard(r))
+      ${this._isAdult && this._people.length > 1 ? html`
+        <div class="chips" role="radiogroup" aria-label="Show routines for">
+          <button class="chip ${this._filter === 'all' ? 'on' : ''}" @click=${() => { this._filter = 'all'; }}>Everyone</button>
+          ${this._people.map(p => html`<button class="chip ${this._filter === p.id ? 'on' : ''}" @click=${() => { this._filter = p.id; }}>${avatar(this.hass, p, 22)}${p.name}</button>`)}
+        </div>` : nothing}
+      ${slots.length ? this._routineGroups(slots, {})
         : html`<div class="empty"><span>☀️</span><p>${this._isAdult ? 'No routines yet. Start from a morning or evening routine.' : 'No routines for you yet.'}</p></div>`}`;
   }
 
@@ -902,6 +980,7 @@ class KshChoresModule extends LitElement {
         <p class="muted">${this._canSwitch ? 'Tap the name at the top to say who is using this device.' : 'You are signed in as yourself, so chores are always done as you.'}</p>`}
 
       ${this._celebrationSection()}
+      ${this._kidsSection()}
 
       <h3>People</h3>
       <div class="card">
@@ -1061,7 +1140,7 @@ class KshChoresModule extends LitElement {
   _chips(selected, onToggle, anyone) {
     return html`<div class="chips">
       <button class="chip ${!selected.length ? 'on' : ''}" @click=${anyone}>Anyone</button>
-      ${this._people.map(p => html`<button class="chip ${selected.includes(p.id) ? 'on' : ''}" @click=${() => onToggle(p.id)}>${p.emoji} ${p.name}</button>`)}
+      ${this._people.map(p => html`<button class="chip ${selected.includes(p.id) ? 'on' : ''}" @click=${() => onToggle(p.id)}>${avatar(this.hass, p, 22)}${p.name}</button>`)}
     </div>`;
   }
 
@@ -1213,21 +1292,23 @@ class KshChoresModule extends LitElement {
   _runSheet() {
     const r = this._state.routines.find(x => x.id === this._sheet.id);
     if (!r) return nothing;
-    const run = this._run(r.id);
+    const pid = this._sheet.person || this._meId;
+    const person = this._person(pid);
+    const run = this._run(r.id, pid);
     const steps = this._stepsToday(r);
     const next = steps.find(st => !run.steps.includes(st.id));
     const done = steps.filter(st => run.steps.includes(st.id)).length;
-    return html`${this._title(`${r.emoji} ${r.name}`)}
+    return html`${this._title(`${r.emoji} ${r.name}${person && pid !== this._meId ? ` · ${person.name}` : ''}`)}
       <div class="bar"><i style="width:${steps.length ? (done / steps.length) * 100 : 0}%"></i></div>
       ${next ? html`
         <div class="focus">
           <div class="fe">${next.emoji || '👉'}</div>
           <div class="ft">${next.text}</div>
-          <button class="primary huge" @click=${() => this._toggleStep(r, next.id, true)}><ha-icon icon="mdi:check"></ha-icon>Done</button>
+          <button class="primary huge" @click=${() => this._toggleStep(r, next.id, true, pid)}><ha-icon icon="mdi:check"></ha-icon>Done</button>
         </div>` : html`<div class="focus"><div class="fe">🎉</div><div class="ft">All steps done!</div></div>`}
       <h4>Today's steps</h4>
       ${steps.map(st => html`
-        <button class="step-row ${run.steps.includes(st.id) ? 'done' : ''}" @click=${() => this._toggleStep(r, st.id, !run.steps.includes(st.id))}>
+        <button class="step-row ${run.steps.includes(st.id) ? 'done' : ''}" @click=${() => this._toggleStep(r, st.id, !run.steps.includes(st.id), pid)}>
           <ha-icon icon=${run.steps.includes(st.id) ? 'mdi:check-circle' : 'mdi:circle-outline'}></ha-icon>
           <span>${st.emoji} ${st.text}</span>
         </button>`)}`;
@@ -1255,7 +1336,7 @@ class KshChoresModule extends LitElement {
       </div>`;
   }
 
-  static styles = css`
+  static styles = [avatarCss, css`
     :host { display: block; position: relative; overflow: hidden; color: var(--hub-text); }
     * { box-sizing: border-box; }
     button, input, select { font: inherit; color: inherit; }
@@ -1279,6 +1360,12 @@ class KshChoresModule extends LitElement {
     .chip-person span:last-child { display: flex; flex-direction: column; line-height: 1.2; }
     .chip-person small, .txt small { color: var(--hub-muted); font-size: 12.5px; }
     .badge { margin-left: auto; background: #f59a4d; color: #2a1503; border-radius: 999px; padding: 4px 12px; font-size: 12.5px; font-weight: 800; }
+    .pgroup { display: flex; align-items: center; gap: 10px; margin: 16px 4px 6px; font-size: 15px; font-weight: 800; }
+    .faces { display: inline-flex; flex: none; align-items: center; }
+    .faces .av { margin-left: -9px; box-shadow: 0 0 0 2px var(--hub-surface); }
+    .faces .av:first-child { margin-left: 0; }
+    .faces.everyone { color: var(--hub-muted); --mdc-icon-size: 26px; width: 34px; justify-content: center; }
+    .item.has-who { box-shadow: inset 4px 0 0 var(--who); }
     .avatar { width: 38px; height: 38px; border-radius: 50%; flex: none; display: inline-flex; align-items: center; justify-content: center; font-size: 20px;
       background: color-mix(in srgb, var(--c) 28%, transparent); border: 2px solid var(--c); }
     .avatar.lg { width: 46px; height: 46px; font-size: 24px; }
@@ -1410,7 +1497,7 @@ class KshChoresModule extends LitElement {
     .step-row ha-icon { color: var(--hub-muted); }
     .step-row.done { opacity: .6; text-decoration: line-through; } .step-row.done ha-icon { color: #4fd1a1; }
     .celebrate { text-align: center; padding: 10px 0 6px; } .celebrate h2 { margin: 4px 0; }
-  `;
+  `];
 }
 
 customElements.define('ksh-chores-module', KshChoresModule);

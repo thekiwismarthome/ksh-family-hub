@@ -1,4 +1,5 @@
 import { LitElement, html, css, nothing } from 'lit';
+import { avatar, avatarCss, faceContent } from '../../hub/avatar.js';
 import { enableSwipeClose } from '../../hub/swipe.js';
 import { resolveActing, actingMsg, setToken } from '../../hub/actor.js';
 import { CATEGORIES, categoryById, EVENT_EMOJIS, REMIND_OPTIONS } from './categories.js';
@@ -14,7 +15,7 @@ const CHORE_VIEWS_KEY = 'ksh_calendar_chore_views';
 const VIEW_LABELS = [['day', 'Day'], ['week', 'Week'], ['agenda', 'Agenda'], ['month', 'Month']];
 const readChoreViews = () => {
   try { const v = JSON.parse(localStorage.getItem(CHORE_VIEWS_KEY) || 'null'); if (Array.isArray(v)) return v; } catch { /* default */ }
-  return ['day', 'week', 'agenda'];       // the month grid is busy enough without a chore on every day
+  return ['day', 'week', 'agenda', 'month'];       // so every day with something on it shows it
 };
 const FACE_KEY = 'ksh_calendar_face_side';
 const readFaceSide = () => { try { return localStorage.getItem(FACE_KEY) === 'right' ? 'right' : 'left'; } catch { return 'left'; } };
@@ -236,7 +237,7 @@ class KshCalendarModule extends LitElement {
     this.setHubView('day');
   }
 
-  _title() {
+  _period() {
     const loc = this.hass.locale?.language || undefined;
     const c = fromIso(this._cursor);
     if (this._view === 'month') return c.toLocaleDateString(loc, { month: 'long', year: 'numeric' });
@@ -420,34 +421,26 @@ class KshCalendarModule extends LitElement {
   _toolbar() {
     const people = this._people.filter(p => p.role !== 'guest');
     return html`
+      <h2 class="period" aria-live="polite">${this._period()}</h2>
       <div class="toolbar">
         ${this._view !== 'agenda' ? html`
           <button class="nav" aria-label="Previous" @click=${() => this._go(-1)}><ha-icon icon="mdi:chevron-left"></ha-icon></button>
-          <h2 class="ttl">${this._title()}</h2>
           <button class="nav" aria-label="Next" @click=${() => this._go(1)}><ha-icon icon="mdi:chevron-right"></ha-icon></button>
-          <button class="today" @click=${() => this._goToday()}>Today</button>` : html`<h2 class="ttl">${this._title()}</h2>`}
+          <button class="today" @click=${() => this._goToday()}>Today</button>` : nothing}
         <span class="grow"></span>
         ${this._isAdult ? html`<button class="add" @click=${() => this.openAdd('event')}><ha-icon icon="mdi:plus"></ha-icon><span>Add</span></button>` : nothing}
       </div>
       ${people.length > 1 ? html`
         <div class="chips" role="radiogroup" aria-label="Show events for">
           <button class="chip ${this._who === 'all' ? 'on' : ''}" @click=${() => { this._who = 'all'; }}>Everyone</button>
-          ${people.map(p => html`<button class="chip ${this._who === p.id ? 'on' : ''}" @click=${() => { this._who = p.id; }}>${p.emoji} ${p.name}</button>`)}
+          ${people.map(p => html`<button class="chip ${this._who === p.id ? 'on' : ''}" @click=${() => { this._who = p.id; }}>${avatar(this.hass, p, 22)}${p.name}</button>`)}
         </div>` : nothing}`;
   }
 
   // -- shared pieces --
 
-  // The Home Assistant picture of a person (from their person entity), when there is one
-  _pic(p) {
-    if (!p?.user_id) return null;
-    const st = Object.values(this.hass?.states || {}).find(x => x.entity_id?.startsWith('person.') && x.attributes?.user_id === p.user_id);
-    return st?.attributes?.entity_picture || null;
-  }
-
   _face(p) {
-    const pic = this._pic(p);
-    return html`<span class="face" style="--p:${p.color}" title=${p.name}>${pic ? html`<img src=${pic} alt=${p.name} draggable="false">` : p.emoji}</span>`;
+    return html`<span class="face" style="--p:${p.color}" title=${p.name}>${faceContent(this.hass, p)}</span>`;
   }
 
   /** Who it belongs to: their faces (picture or emoji) in their colour. Nobody listed means the whole family. */
@@ -526,7 +519,7 @@ class KshCalendarModule extends LitElement {
                   <span class="chipcol">${evs.slice(0, 2).map(e => html`<span class="mini" style="--c:${e.color}">${e.emoji} ${e.title}</span>`)}
                     ${evs.length > 2 ? html`<span class="more">+${evs.length - 2} more</span>` : nothing}
                     ${chores.length ? html`<span class="mini chore" style="--c:#3db6cc" title="${chores.length} chore${chores.length === 1 ? '' : 's'}">✅ ${chores.length}</span>` : nothing}</span>`
-                : html`<span class="dots">${evs.slice(0, 3).map(e => html`<i style="background:${e.color}"></i>`)}${chores.length ? html`<i class="ch"></i>` : nothing}</span>`}
+                : html`<span class="emo">${evs.slice(0, 2).map(e => html`<span style="--c:${e.color}">${e.emoji}</span>`)}${chores.length ? html`<span class="cn" title="${chores.length} chore${chores.length === 1 ? '' : 's'}">✓${chores.length}</span>` : nothing}${evs.length > 2 ? html`<span class="cn">+${evs.length - 2}</span>` : nothing}</span>`}
               </button>`;
           })}
         </div>
@@ -697,7 +690,7 @@ class KshCalendarModule extends LitElement {
         <div class="facts">
           <div><ha-icon icon="mdi:clock-outline"></ha-icon>${timeLabel(e)}</div>
           ${e.location ? html`<div><ha-icon icon="mdi:map-marker-outline"></ha-icon>${e.location}</div>` : nothing}
-          ${who.length ? html`<div><ha-icon icon="mdi:account-multiple-outline"></ha-icon>${who.map(p => `${p.emoji} ${p.name}`).join(', ')}</div>` : nothing}
+          ${who.length ? html`<div><ha-icon icon="mdi:account-multiple-outline"></ha-icon>${who.map(p => p.name).join(', ')}</div>` : nothing}
           ${e.calendar ? html`<div><ha-icon icon="mdi:calendar-sync-outline"></ha-icon>${e.calendar}</div>` : nothing}
           ${e.kind === 'chore' ? html`<div><ha-icon icon="mdi:check-circle-outline"></ha-icon>Chore${e.points ? ` · +${e.points} ★` : ''}${e.status && e.status !== 'open' ? ` · ${e.status === 'approved' ? 'done' : e.status}` : ''}</div>` : nothing}
           ${e.notes ? html`<div class="notes"><ha-icon icon="mdi:text"></ha-icon>${e.notes}</div>` : nothing}
@@ -710,7 +703,7 @@ class KshCalendarModule extends LitElement {
   _chips(selected, onToggle, everyone) {
     return html`<div class="chips">
       <button type="button" class="chip ${!selected.length ? 'on' : ''}" @click=${everyone}>Everyone</button>
-      ${this._people.filter(p => p.role !== 'guest' || true).map(p => html`<button type="button" class="chip ${selected.includes(p.id) ? 'on' : ''}" @click=${() => onToggle(p.id)}>${p.emoji} ${p.name}</button>`)}
+      ${this._people.filter(p => p.role !== 'guest' || true).map(p => html`<button type="button" class="chip ${selected.includes(p.id) ? 'on' : ''}" @click=${() => onToggle(p.id)}>${avatar(this.hass, p, 22)}${p.name}</button>`)}
     </div>`;
   }
 
@@ -783,7 +776,7 @@ class KshCalendarModule extends LitElement {
       </div>`;
   }
 
-  static styles = css`
+  static styles = [avatarCss, css`
     :host { display: block; position: relative; overflow: hidden; color: var(--hub-text); --cal: #8f7cf0; }
     * { box-sizing: border-box; }
     button, input, select { font: inherit; color: inherit; }
@@ -800,11 +793,11 @@ class KshCalendarModule extends LitElement {
     .grow { flex: 1; }
 
     .toolbar { display: flex; align-items: center; gap: 8px; margin: 6px 0 8px; }
-    .ttl { margin: 0 4px; font-size: 19px; font-weight: 800; letter-spacing: -.01em; min-width: 0; }
+    .period { margin: 8px 4px 0; font-size: 24px; font-weight: 800; letter-spacing: -.01em; }
     .nav { width: 38px; height: 38px; border-radius: 50%; flex: none; border: 1px solid var(--hub-border); background: var(--hub-surface); display: flex; align-items: center; justify-content: center; --mdc-icon-size: 22px; }
     .today { border: 1px solid var(--hub-border); background: transparent; color: var(--hub-muted); border-radius: 999px; padding: 7px 14px; font-weight: 700; font-size: 13px; }
     .add, .primary { border: none; background: var(--hub-accent); color: var(--hub-accent-ink); border-radius: 999px; padding: 9px 16px; font-weight: 800; display: inline-flex; align-items: center; gap: 4px; justify-content: center; --mdc-icon-size: 20px; }
-    @media (max-width: 420px) { .add span { display: none; } .add { padding: 9px 11px; } .ttl { font-size: 17px; } }
+    @media (max-width: 420px) { .add span { display: none; } .add { padding: 9px 11px; } .period { font-size: 22px; } }
     .chips { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0 10px; }
     .chip { border: 1px solid var(--hub-border); background: transparent; color: var(--hub-muted); border-radius: 999px; padding: 6px 14px; font-weight: 600; font-size: 13.5px; }
     .chip.on { background: var(--hub-accent); color: var(--hub-accent-ink); border-color: transparent; }
@@ -826,6 +819,9 @@ class KshCalendarModule extends LitElement {
     .cell.today .num { background: var(--hub-accent); color: var(--hub-accent-ink); }
     .cell.sel { border-color: var(--cal); box-shadow: 0 0 0 2px color-mix(in srgb, var(--cal) 45%, transparent); }
     .num { width: 26px; height: 26px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-weight: 800; font-size: 13px; flex: none; }
+    .emo { display: flex; gap: 1px 2px; flex-wrap: wrap; justify-content: center; font-size: 12px; line-height: 1.15; min-height: 14px; }
+    .emo > span { border-bottom: 2px solid var(--c, transparent); }
+    .emo .cn { font-size: 10px; font-weight: 800; color: var(--hub-muted); border: none; }
     .dots { display: flex; gap: 3px; flex-wrap: wrap; justify-content: center; min-height: 7px; }
     .dots i { width: 7px; height: 7px; border-radius: 50%; display: block; }
     .dots i.ch { background: transparent; border: 1.5px solid #3db6cc; }
@@ -937,7 +933,7 @@ class KshCalendarModule extends LitElement {
     .detail .dh { display: flex; align-items: center; gap: 12px; } .detail h2 { margin: 0; font-size: 20px; }
     .em.big { font-size: 40px; width: 56px; height: 56px; display: inline-flex; align-items: center; justify-content: center; border-radius: 18px; background: color-mix(in srgb, var(--c) 22%, transparent); }
     .facts { display: grid; gap: 10px; margin: 14px 0; } .facts div { display: flex; align-items: flex-start; gap: 10px; font-size: 14.5px; --mdc-icon-size: 20px; } .facts ha-icon { color: var(--hub-muted); flex: none; }
-  `;
+  `];
 }
 
 customElements.define('ksh-calendar-module', KshCalendarModule);
