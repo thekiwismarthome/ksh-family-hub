@@ -12,6 +12,7 @@ import hashlib
 import hmac
 import logging
 import secrets
+import time
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -30,6 +31,11 @@ EVENT_PEOPLE_UPDATED = f"{DOMAIN}_people_updated"
 ROLES = ("adult", "child", "guest")
 COLOURS = ["#4fd1a1", "#f59a4d", "#6f80f2", "#e8639f", "#3db6cc", "#e2ac3f", "#cf6fb6", "#e46d5e"]
 NAME = vol.All(str, vol.Length(min=1, max=40))
+# Every command that acts for someone takes these: who, and the proof of their PIN (see ws_verify_pin)
+AS = {vol.Optional("as_person"): str, vol.Optional("pin_token"): str}
+PIN_TOKEN_DAYS = 60
+MAX_PIN_TRIES = 5
+PIN_LOCK_SECONDS = 60
 
 
 def _now() -> str:
@@ -143,7 +149,27 @@ class ActorError(Exception):
         self.message = message
 
 
-async def async_resolve_actor(hass: HomeAssistant, connection, as_person: str | None) -> dict:
+def _tokens(hass: HomeAssistant) -> dict:
+    return hass.data.setdefault(DOMAIN, {}).setdefault("pin_tokens", {})
+
+
+def issue_pin_token(hass: HomeAssistant, user_id: str, person_id: str) -> str:
+    """Proof that `person_id`'s PIN was entered on a login. Kept in memory, so a restart asks for the PIN again."""
+    now = time.time()
+    tokens = _tokens(hass)
+    for key in [k for k, v in tokens.items() if v[2] < now]:
+        del tokens[key]
+    token = secrets.token_urlsafe(18)
+    tokens[token] = (user_id, person_id, now + PIN_TOKEN_DAYS * 86400)
+    return token
+
+
+def _token_ok(hass: HomeAssistant, token: str | None, user_id: str, person_id: str) -> bool:
+    entry = _tokens(hass).get(token or "")
+    return bool(entry and entry[0] == user_id and entry[1] == person_id and entry[2] > time.time())
+
+
+async def async_resolve_actor(hass: HomeAssistant, connection, as_person: str | None, pin_token: str | None = None) -> dict:
     """The person a request is made on behalf of.
 
     A Home Assistant user who is linked to a person can only act as that person (administrators may act as anyone,
@@ -167,6 +193,12 @@ async def async_resolve_actor(hass: HomeAssistant, connection, as_person: str | 
     person = await ps.get(as_person)
     if person is None:
         raise ActorError("not_found", "Choose who you are first")
+    # A shared login: nobody has to take anybody's word for who they are. A profile with a PIN needs the PIN
+    # (entered once on this login), and an adult profile must have one so a child cannot pick it.
+    if person["role"] == "adult" and not person.get("pin_hash"):
+        raise ActorError("pin_required", f"Set a PIN for {person['name']} to use this profile on a shared login")
+    if person.get("pin_hash") and not _token_ok(hass, pin_token, user.id, person["id"]):
+        raise ActorError("pin_required", f"Enter {person['name']}'s PIN")
     return person
 
 
@@ -179,7 +211,7 @@ def is_adult(actor: dict) -> bool:
 # ---------------------------------------------------------------------------
 
 def async_register_commands(hass: HomeAssistant) -> None:
-    for command in (ws_list, ws_add, ws_update, ws_delete, ws_verify_pin):
+    for command in (ws_list, ws_add, ws_update, ws_delete, ws_verify_pin, ws_set_pin):
         websocket_api.async_register_command(hass, command)
 
 
@@ -197,7 +229,7 @@ async def ws_list(hass, connection, msg) -> None:
 
 async def _require_adult(hass, connection, msg):
     try:
-        actor = await async_resolve_actor(hass, connection, msg.get("as_person"))
+        actor = await async_resolve_actor(hass, connection, msg.get("as_person"), msg.get("pin_token"))
     except ActorError as err:
         connection.send_error(msg["id"], err.code, err.message)
         return None
@@ -209,7 +241,7 @@ async def _require_adult(hass, connection, msg):
 
 @websocket_api.websocket_command({
     vol.Required("type"): f"{DOMAIN}/people/add",
-    vol.Optional("as_person"): str,
+    **AS,
     vol.Required("name"): NAME,
     vol.Optional("role", default="child"): vol.In(ROLES),
     vol.Optional("emoji", default="🙂"): vol.All(str, vol.Length(max=8)),
@@ -230,7 +262,7 @@ async def ws_add(hass, connection, msg) -> None:
 
 @websocket_api.websocket_command({
     vol.Required("type"): f"{DOMAIN}/people/update",
-    vol.Optional("as_person"): str,
+    **AS,
     vol.Required("person_id"): str,
     vol.Optional("name"): NAME,
     vol.Optional("role"): vol.In(ROLES),
@@ -264,7 +296,7 @@ async def ws_update(hass, connection, msg) -> None:
 
 @websocket_api.websocket_command({
     vol.Required("type"): f"{DOMAIN}/people/delete",
-    vol.Optional("as_person"): str,
+    **AS,
     vol.Required("person_id"): str,
 })
 @websocket_api.async_response
@@ -291,9 +323,51 @@ async def ws_delete(hass, connection, msg) -> None:
 })
 @websocket_api.async_response
 async def ws_verify_pin(hass, connection, msg) -> None:
+    """Check a PIN. On success the answer carries a token that proves it, to send with later requests."""
     ps = store(hass)
     person = await ps.get(msg["person_id"])
     if person is None:
         connection.send_error(msg["id"], "not_found", "Person not found")
         return
-    connection.send_result(msg["id"], {"ok": ps.check_pin(person, msg["pin"])})
+    tries = hass.data[DOMAIN].setdefault("pin_tries", {})
+    count, until = tries.get(person["id"], (0, 0.0))
+    if until > time.time():
+        connection.send_error(msg["id"], "unauthorized", "Too many wrong tries. Wait a minute and try again.")
+        return
+    if not ps.check_pin(person, msg["pin"]):
+        count += 1
+        tries[person["id"]] = (0, time.time() + PIN_LOCK_SECONDS) if count >= MAX_PIN_TRIES else (count, 0.0)
+        connection.send_result(msg["id"], {"ok": False})
+        return
+    tries.pop(person["id"], None)
+    connection.send_result(msg["id"], {"ok": True, "token": issue_pin_token(hass, connection.user.id, person["id"])
+                                       if person.get("pin_hash") else None})
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): f"{DOMAIN}/people/set_pin",
+    vol.Required("person_id"): str,
+    vol.Required("pin"): vol.Any(None, vol.All(str, vol.Match(r"^\d{4}$"))),
+    **AS,
+})
+@websocket_api.async_response
+async def ws_set_pin(hass, connection, msg) -> None:
+    """Set, change or remove a PIN: a person for themselves, or an adult for anyone."""
+    try:
+        actor = await async_resolve_actor(hass, connection, msg.get("as_person"), msg.get("pin_token"))
+    except ActorError as err:
+        connection.send_error(msg["id"], err.code, err.message)
+        return
+    ps = store(hass)
+    person = await ps.get(msg["person_id"])
+    if person is None:
+        connection.send_error(msg["id"], "not_found", "Person not found")
+        return
+    if not is_adult(actor) and actor.get("id") != person["id"]:
+        connection.send_error(msg["id"], "unauthorized", "You can only change your own PIN")
+        return
+    ps.set_pin(person, msg["pin"])
+    await ps.save()
+    # The PIN that was just set is proof enough on this login
+    token = issue_pin_token(hass, connection.user.id, person["id"]) if msg["pin"] else None
+    connection.send_result(msg["id"], {"person": ps.public(person), "token": token})

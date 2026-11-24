@@ -1,6 +1,6 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { enableSwipeClose } from './swipe.js';
-import { getActing } from './actor.js';
+import { getActing, actingMsg, resolveActing } from './actor.js';
 import { EMOJIS } from '../modules/chores/templates.js';
 
 const LANGUAGES = [
@@ -12,9 +12,10 @@ const LANGUAGES = [
 const QUICK = [
   { id: 'shopping',  label: 'Shopping List', icon: 'mdi:cart-outline',        color: '#4fd1a1', module: 'shopping' },
   { id: 'meals',     label: 'Recipes',       icon: 'mdi:silverware-fork-knife', color: '#f59a4d', module: 'recipes' },
-  { id: 'reminders', label: 'Reminders',     icon: 'mdi:bell-outline',        color: '#6f80f2', soon: true },
   { id: 'chores',    label: 'Chores',        icon: 'mdi:check-circle-outline', color: '#3db6cc', module: 'chores' },
-  { id: 'birthdays', label: 'Birthdays',     icon: 'mdi:cake-variant-outline', color: '#cf6fb6', soon: true },
+  { id: 'event',     label: 'Event',         icon: 'mdi:calendar-plus',       color: '#8f7cf0', module: 'calendar' },
+  { id: 'reminders', label: 'Reminders',     icon: 'mdi:bell-outline',        color: '#6f80f2', module: 'calendar' },
+  { id: 'birthdays', label: 'Birthdays',     icon: 'mdi:cake-variant-outline', color: '#cf6fb6', module: 'calendar' },
 ];
 
 /** The bottom sheets opened from the top bar: menu, quick add, invite member, region and language. */
@@ -166,7 +167,7 @@ class KshHubSheets extends LitElement {
   }
 
   get _iAmAdult() {
-    const acting = this._people.find(p => p.id === getActing(this.hass)) || this._people.find(p => p.id === this._me);
+    const acting = this._people.find(p => p.id === resolveActing(this.hass, this._people, this._me));
     return acting ? acting.role === 'adult' : !!this.hass?.user?.is_admin;
   }
 
@@ -182,9 +183,8 @@ class KshHubSheets extends LitElement {
     const f = this._form;
     if (!f.name.trim()) { this._error = 'Give them a name'; return; }
     if (f.pin && !/^\d{4}$/.test(f.pin)) { this._error = 'A PIN is four digits'; return; }
-    const acting = getActing(this.hass);
-    const base = { name: f.name.trim(), role: f.role, emoji: f.emoji || '🙂', notify: f.notify.trim() || null };
-    if (acting) base.as_person = acting;
+    const acting = resolveActing(this.hass, this._people, this._me);
+    const base = { name: f.name.trim(), role: f.role, emoji: f.emoji || '🙂', notify: f.notify.trim() || null, ...actingMsg(this.hass, acting) };
     let res;
     if (this._edit === 'new') res = await this._ws({ type: 'ksh_family_hub/people/add', ...base, ...(f.pin ? { pin: f.pin } : {}) });
     else res = await this._ws({ type: 'ksh_family_hub/people/update', person_id: this._edit, ...base, ...(f.pin ? { pin: f.pin } : f.clearPin ? { pin: null } : {}) });
@@ -194,8 +194,8 @@ class KshHubSheets extends LitElement {
   async _deletePerson() {
     const p = this._people.find(x => x.id === this._edit);
     if (!confirm(`Remove ${p.name}? Points they earned stay in the history.`)) return;
-    const acting = getActing(this.hass);
-    const res = await this._ws({ type: 'ksh_family_hub/people/delete', person_id: p.id, ...(acting ? { as_person: acting } : {}) });
+    const acting = resolveActing(this.hass, this._people, this._me);
+    const res = await this._ws({ type: 'ksh_family_hub/people/delete', person_id: p.id, ...actingMsg(this.hass, acting) });
     if (res) { this._edit = null; this._form = null; this._loadPeople(); }
   }
 
@@ -369,11 +369,12 @@ class KshHubSheets extends LitElement {
           <label>Picture</label>
           <div class="emojis"><input class="emoji-in" maxlength="8" .value=${f.emoji} @input=${e => set({ emoji: e.target.value })}>
             ${EMOJIS.map(e => html`<button type="button" class=${e === f.emoji ? 'on' : ''} @click=${() => set({ emoji: e })}>${e}</button>`)}</div>
-          <label>PIN <small>(optional)</small>
+          <label>PIN <small>(4 digits)</small>
             <input type="password" inputmode="numeric" maxlength="4" autocomplete="off" .value=${f.pin} placeholder=${person?.has_pin ? 'Type a new PIN to change it' : '4 digits'}
               @input=${e => set({ pin: e.target.value.replace(/\D/g, ''), clearPin: false })}></label>
           ${person?.has_pin ? html`<button type="button" class="linkbtn" @click=${() => set({ pin: '', clearPin: !f.clearPin })}>${f.clearPin ? 'The PIN will be removed. Undo' : 'Remove the PIN'}</button>` : nothing}
-          <p class="hint">A PIN stops someone on a shared tablet from switching to this person.</p>
+          <p class="hint">With a PIN, ${f.name.trim() || 'they'} can pick their own name on any device and tick off their own chores and routines by typing it.
+            It also stops someone else switching to this profile. On a shared login, adults must have a PIN.</p>
           <label>Phone notifications <small>(optional)</small>
             <input .value=${f.notify} placeholder="notify.mobile_app_their_phone" @input=${e => set({ notify: e.target.value })}></label>
           <p class="hint">The notify service of their phone in Home Assistant, used for chore reminders.</p>

@@ -51,6 +51,7 @@ async def async_setup_module(hass: HomeAssistant, version: str) -> list:
 
     async def _tick(_now) -> None:
         await _send_reminders(hass)
+        await _settle_pocket_money(hass)
 
     return [async_track_time_interval(hass, _tick, timedelta(seconds=60))]
 
@@ -95,3 +96,29 @@ async def _send_reminders(hass: HomeAssistant) -> None:
             from homeassistant.components import persistent_notification
             persistent_notification.async_create(
                 hass, message, title=f"Chore: {title}", notification_id=f"ksh_chore_{chore['id']}_{now.date().isoformat()}")
+
+
+async def _settle_pocket_money(hass: HomeAssistant) -> None:
+    """Pay pocket money for weeks or months that have finished. Needs the Finance part; without it nothing is settled,
+    so a week is paid later rather than lost."""
+    from ..family_finance import get_store as get_finance
+    from .handlers import local_date
+
+    store = hass.data.get(DOMAIN, {}).get("store")
+    if store is None:
+        return
+    async with store.lock:
+        results = logic.pocket_due(store.data, dt_util.now().date(), local_date)
+        if not results:
+            return
+        finance = get_finance(hass)
+        paying = [r for r in results if r["paid"]]
+        if paying and finance is None:
+            return
+        for r in paying:
+            await finance.async_deposit(
+                r["person_id"], r["account"], r["amount"],
+                f"Pocket money ({r['start'].strftime('%d %b')} – {(r['end'] - timedelta(days=1)).strftime('%d %b')})", r["key"],
+                dt_util.utcnow().isoformat())
+        logic.pocket_apply(store.data, results)
+        await store.async_save()

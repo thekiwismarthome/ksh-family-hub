@@ -8,6 +8,11 @@
   runs      {"<routine>:<date>:<person>": {steps: [ids], completed_at}}
   ledger    [{id, key, person_id, points, reason, at, kind}]    the points balance is the sum
   reminded  {"<chore>:<date>": true}
+  celebrations {person id: animation chosen for when that person finishes a chore or routine}
+  rewards   things points can be spent on [{id, name, emoji, cost, active}]
+  redemptions requests to spend points [{id, reward_id, name, emoji, cost, person_id, status, at, ...}]
+  pocket    {person id: {enabled, period, points, amount (cents), account, since, settled}}   pocket money rules
+  pocket_history  what each finished week or month earned and whether it paid
 """
 from __future__ import annotations
 
@@ -35,7 +40,8 @@ def new_id() -> str:
 
 
 def empty_data() -> dict[str, Any]:
-    return {"chores": [], "routines": [], "instances": {}, "gens": {}, "runs": {}, "ledger": [], "reminded": {}}
+    return {"chores": [], "routines": [], "instances": {}, "gens": {}, "runs": {}, "ledger": [], "reminded": {}, "celebrations": {},
+            "rewards": [], "redemptions": [], "pocket": {}, "pocket_history": []}
 
 
 def parse_date(value: str) -> date:
@@ -86,7 +92,7 @@ def occurs_on(chore: dict, day: date) -> bool:
     return False
 
 
-def clean_recurrence(rec: Any) -> dict:
+def clean_recurrence(rec: Any, default_start: str | None = None) -> dict:
     rec = rec or {}
     kind = rec.get("type", "daily")
     if kind == "daily":
@@ -101,7 +107,7 @@ def clean_recurrence(rec: Any) -> dict:
         if unit not in ("day", "week", "month"):
             raise ChoreError("Repeat must be days, weeks or months")
         out = {"type": "custom", "every": max(1, min(int(rec.get("every", 1)), 365)), "unit": unit,
-               "start": parse_date(rec.get("start")).isoformat()}
+               "start": parse_date(rec.get("start") or default_start).isoformat()}
         if unit == "week":
             out["days"] = days
         return out
@@ -119,7 +125,11 @@ def clean_chore(raw: dict, today: date, existing: dict | None = None) -> dict:
     chore["points"] = max(0, min(int(raw.get("points", chore.get("points", 1))), 1000))
     assignees = raw.get("assignees", chore.get("assignees", []))
     chore["assignees"] = list(dict.fromkeys(str(a) for a in assignees))     # [] means Anyone
-    chore["recurrence"] = clean_recurrence(raw.get("recurrence", chore.get("recurrence")))
+    if raw.get("start"):
+        chore["start"] = parse_date(raw["start"]).isoformat()
+    chore["recurrence"] = clean_recurrence(raw.get("recurrence", chore.get("recurrence")), chore.get("start"))
+    if chore["recurrence"]["type"] == "once":
+        chore["start"] = chore["recurrence"]["date"]
     due = raw.get("due_time", chore.get("due_time"))
     if due in (None, ""):
         chore["due_time"] = None
@@ -177,20 +187,44 @@ def can_do(chore: dict, actor: dict) -> bool:
 
 
 def day_items(data: dict, day: date) -> list[dict]:
-    items = []
-    for chore in data["chores"]:
-        if not occurs_on(chore, day):
-            continue
-        inst = data["instances"].get(_key(chore["id"], day))
-        items.append({
-            "chore_id": chore["id"], "date": day.isoformat(),
-            "status": inst["status"] if inst else "open",
-            "done_by": inst.get("done_by") if inst else None,
-            "approved_by": inst.get("approved_by") if inst else None,
-            "points": inst.get("points", 0) if inst else 0,
-            "note": inst.get("note") if inst else None,
-        })
-    return items
+    return [_item(c, day, data["instances"].get(_key(c["id"], day))) for c in data["chores"] if occurs_on(c, day)]
+
+
+def _item(chore: dict, day: date, inst: dict | None) -> dict:
+    return {
+        "chore_id": chore["id"], "date": day.isoformat(),
+        "status": inst["status"] if inst else "open",
+        "done_by": inst.get("done_by") if inst else None,
+        "approved_by": inst.get("approved_by") if inst else None,
+        "points": inst.get("points", 0) if inst else 0,
+        "note": inst.get("note") if inst else None,
+    }
+
+
+def overdue_items(data: dict, today: date, now: datetime, lookback: int = 7) -> list[dict]:
+    """Chores that were due on an earlier day and are still not done.
+
+    A chore is never overdue on its own day before its due time has passed, and one without a due time is only
+    overdue once the day has ended. A chore is not overdue before it starts.
+    """
+    out = []
+    for back in range(1, lookback + 1):
+        day = today - timedelta(days=back)
+        for chore in data["chores"]:
+            if not occurs_on(chore, day):
+                continue
+            item = _item(chore, day, data["instances"].get(_key(chore["id"], day)))
+            if item["status"] in ("open", "rejected"):
+                out.append(item)
+    return out
+
+
+def range_items(data: dict, start: date, end: date) -> list[dict]:
+    """Every chore occurrence from `start` to `end` (inclusive), for the calendar."""
+    out = []
+    for n in range(min((end - start).days, 120) + 1):
+        out.extend(day_items(data, start + timedelta(days=n)))
+    return out
 
 
 def pending(data: dict) -> list[dict]:
@@ -303,7 +337,9 @@ def clean_routine(raw: dict, existing: dict | None = None) -> dict:
     for s in raw.get("steps", routine.get("steps", [])):
         text = str(s.get("text", "")).strip()[:60]
         if text:
-            steps.append({"id": str(s.get("id") or new_id()), "text": text, "emoji": str(s.get("emoji", ""))[:8]})
+            days = sorted({int(d) for d in (s.get("days") or []) if 0 <= int(d) <= 6})
+            steps.append({"id": str(s.get("id") or new_id()), "text": text, "emoji": str(s.get("emoji", ""))[:8],
+                          "days": [] if len(days) == 7 else days})        # [] means every day
     if not steps:
         raise ChoreError("Add at least one step")
     routine["steps"] = steps[:20]
@@ -316,6 +352,11 @@ def _get_routine(data: dict, routine_id: str) -> dict:
     if routine is None:
         raise ChoreError("That routine no longer exists", "not_found")
     return routine
+
+
+def steps_for_day(routine: dict, day: date) -> list[dict]:
+    """The steps of a routine that apply on `day` (a step with no days applies every day)."""
+    return [s for s in routine.get("steps", []) if not s.get("days") or day.weekday() in s["days"]]
 
 
 def routine_for(routine: dict, actor: dict) -> bool:
@@ -331,8 +372,11 @@ def routine_step(data: dict, routine_id: str, day: date, actor: dict, step_id: s
     routine = _get_routine(data, routine_id)
     if not routine_for(routine, actor):
         raise ChoreError("That routine is not assigned to you", "unauthorized")
+    todays = steps_for_day(routine, day)
     if step_id not in {s["id"] for s in routine["steps"]}:
         raise ChoreError("Unknown step", "not_found")
+    if step_id not in {s["id"] for s in todays}:
+        raise ChoreError("That step is not part of the routine on this day")
     key = run_key(routine_id, day, actor["id"])
     run = data["runs"].setdefault(key, {"steps": [], "completed_at": None})
     if done and step_id not in run["steps"]:
@@ -340,7 +384,7 @@ def routine_step(data: dict, routine_id: str, day: date, actor: dict, step_id: s
     elif not done and step_id in run["steps"]:
         run["steps"].remove(step_id)
     awarded = False
-    if len(set(run["steps"])) == len(routine["steps"]) and not run["completed_at"]:
+    if todays and all(s["id"] in run["steps"] for s in todays) and not run["completed_at"]:
         run["completed_at"] = now
         awarded = award(data, f"routine:{key}", actor["id"], routine.get("points", 0),
                         f"{routine.get('emoji', '')} {routine['name']}".strip(), now, kind="routine")
@@ -355,6 +399,197 @@ def day_runs(data: dict, day: date) -> dict[str, dict]:
         if suffix in key:
             routine_id, _, person_id = key.partition(suffix)
             out[f"{routine_id}:{person_id}"] = {"steps": run["steps"], "completed": bool(run["completed_at"])}
+    return out
+
+
+CELEBRATIONS = ("tape", "fireworks", "balloons", "stars", "off")
+DEFAULT_CELEBRATION = "tape"
+
+
+def celebration_for(data: dict, person_id: str) -> str:
+    return data.get("celebrations", {}).get(person_id, DEFAULT_CELEBRATION)
+
+
+def set_celebration(data: dict, person_id: str, style: str) -> None:
+    if style not in CELEBRATIONS:
+        raise ChoreError("Pick one of the celebrations")
+    data.setdefault("celebrations", {})[person_id] = style
+
+
+# ---------------------------------------------------------------------------
+# Spending points: rewards, and requests to spend them
+# ---------------------------------------------------------------------------
+
+def clean_reward(raw: dict, existing: dict | None = None) -> dict:
+    reward = dict(existing or {"id": new_id(), "active": True})
+    name = str(raw.get("name", reward.get("name", ""))).strip()
+    if not name or len(name) > 60:
+        raise ChoreError("Give the reward a name")
+    reward["name"] = name
+    reward["emoji"] = str(raw.get("emoji", reward.get("emoji", "🎁")))[:8] or "🎁"
+    cost = int(raw.get("cost", reward.get("cost", 10)))
+    if cost < 1 or cost > 100000:
+        raise ChoreError("A reward costs between 1 and 100000 points")
+    reward["cost"] = cost
+    reward["active"] = bool(raw.get("active", reward.get("active", True)))
+    return reward
+
+
+def _redemption(data: dict, rid: str) -> dict:
+    red = next((r for r in data["redemptions"] if r["id"] == rid), None)
+    if red is None:
+        raise ChoreError("That request no longer exists", "not_found")
+    return red
+
+
+def free_points(data: dict, person_id: str) -> int:
+    """Points that can still be spent: the balance minus what is already asked for and waiting."""
+    held = sum(r["cost"] for r in data["redemptions"] if r["person_id"] == person_id and r["status"] == "requested")
+    return balances(data).get(person_id, 0) - held
+
+
+def request_reward(data: dict, reward_id: str, actor: dict, now: str) -> dict:
+    if actor["role"] == ROLE_GUEST:
+        raise ChoreError("Guests cannot spend points", "unauthorized")
+    reward = next((r for r in data["rewards"] if r["id"] == reward_id and r.get("active", True)), None)
+    if reward is None:
+        raise ChoreError("That reward is not available", "not_found")
+    if free_points(data, actor["id"]) < reward["cost"]:
+        raise ChoreError("Not enough points yet")
+    red = {"id": new_id(), "reward_id": reward["id"], "name": reward["name"], "emoji": reward["emoji"], "cost": reward["cost"],
+           "person_id": actor["id"], "status": "requested", "at": now}
+    data["redemptions"].append(red)
+    if actor["role"] == ROLE_ADULT:                      # an adult does not wait for someone else to agree
+        return approve_redemption(data, red["id"], actor, now, self_ok=True)
+    return {"redemption": red, "status": "requested"}
+
+
+def approve_redemption(data: dict, rid: str, actor: dict, now: str, self_ok: bool = False) -> dict:
+    if actor["role"] != ROLE_ADULT:
+        raise ChoreError("Only an adult can approve this", "unauthorized")
+    red = _redemption(data, rid)
+    if red["status"] != "requested":
+        raise ChoreError("That request was already answered", "conflict")
+    if red["person_id"] == actor["id"] and not self_ok:
+        raise ChoreError("Someone else has to approve your request", "unauthorized")
+    if balances(data).get(red["person_id"], 0) < red["cost"]:
+        raise ChoreError("They do not have enough points any more")
+    award(data, f"reward:{rid}", red["person_id"], -red["cost"], f"{red['emoji']} {red['name']}".strip(), now, kind="reward")
+    red.update(status="approved", decided_by=actor["id"], decided_at=now)
+    return {"redemption": red, "status": "approved"}
+
+
+def decline_redemption(data: dict, rid: str, actor: dict, now: str) -> dict:
+    if actor["role"] != ROLE_ADULT:
+        raise ChoreError("Only an adult can answer this", "unauthorized")
+    red = _redemption(data, rid)
+    if red["status"] != "requested":
+        raise ChoreError("That request was already answered", "conflict")
+    red.update(status="declined", decided_by=actor["id"], decided_at=now)
+    return {"redemption": red, "status": "declined"}
+
+
+def cancel_redemption(data: dict, rid: str, actor: dict) -> dict:
+    red = _redemption(data, rid)
+    if red["status"] != "requested" or (red["person_id"] != actor["id"] and actor["role"] != ROLE_ADULT):
+        raise ChoreError("That request cannot be taken back", "unauthorized")
+    data["redemptions"].remove(red)
+    return {"cancelled": True}
+
+
+# ---------------------------------------------------------------------------
+# Pocket money: earn enough points in a week or month, and the amount is paid into their Finance account
+# ---------------------------------------------------------------------------
+
+EARNED_KINDS = ("chore", "routine", "reversal")        # what counts towards pocket money (not bonuses or spending)
+POCKET_PERIODS = ("week", "month")
+POCKET_ACCOUNTS = ("cash", "bank")
+
+
+def period_start(period: str, day: date) -> date:
+    return _monday(day) if period == "week" else day.replace(day=1)
+
+
+def next_period_start(period: str, day: date) -> date:
+    if period == "week":
+        return _monday(day) + timedelta(days=7)
+    return date(day.year + (day.month == 12), day.month % 12 + 1, 1)
+
+
+def clean_pocket(raw: dict, existing: dict | None, today: date) -> dict:
+    cur = dict(existing or {"enabled": False, "period": "week", "points": 20, "amount": 500, "account": "bank", "since": None, "settled": None})
+    period = raw.get("period", cur["period"])
+    if period not in POCKET_PERIODS:
+        raise ChoreError("Pocket money is paid weekly or monthly")
+    account = raw.get("account", cur["account"])
+    if account not in POCKET_ACCOUNTS:
+        raise ChoreError("Pay into Cash or Bank")
+    points = int(raw.get("points", cur["points"]))
+    amount = int(raw.get("amount", cur["amount"]))
+    if points < 1 or points > 100000 or amount < 0 or amount > 10_000_000:
+        raise ChoreError("Check the points and the amount")
+    enabled = bool(raw.get("enabled", cur["enabled"]))
+    # Switching it on, or changing the period, starts from the next full week or month so nothing is paid backwards
+    if enabled and (not cur["enabled"] or period != cur["period"] or not cur.get("since")):
+        cur["since"] = today.isoformat()
+        cur["settled"] = None
+    cur.update(enabled=enabled, period=period, points=points, amount=amount, account=account)
+    return cur
+
+
+def _first_period(cfg: dict) -> date:
+    since = parse_date(cfg["since"])
+    start = period_start(cfg["period"], since)
+    return start if start == since else next_period_start(cfg["period"], since)
+
+
+def _default_local(iso: str) -> date:
+    return date.fromisoformat(iso[:10])
+
+
+def earned_in(data: dict, person_id: str, start: date, end: date, to_local=_default_local) -> int:
+    return sum(e["points"] for e in data["ledger"]
+               if e["person_id"] == person_id and e.get("kind") in EARNED_KINDS and start <= to_local(e["at"]) < end)
+
+
+def pocket_due(data: dict, today: date, to_local=_default_local, max_periods: int = 8) -> list[dict]:
+    """Finished weeks or months that have not been settled yet, and whether each earned its pocket money."""
+    out = []
+    for pid, cfg in data.get("pocket", {}).items():
+        if not cfg.get("enabled") or not cfg.get("since"):
+            continue
+        start = parse_date(cfg["settled"]) if cfg.get("settled") else _first_period(cfg)
+        for _ in range(max_periods):
+            end = next_period_start(cfg["period"], start)
+            if end > today:
+                break
+            earned = earned_in(data, pid, start, end, to_local)
+            out.append({"person_id": pid, "start": start, "end": end, "earned": earned, "target": cfg["points"],
+                        "amount": cfg["amount"], "account": cfg["account"], "paid": earned >= cfg["points"] and cfg["amount"] > 0,
+                        "key": f"pocket:{pid}:{start.isoformat()}"})
+            start = end
+    return out
+
+
+def pocket_apply(data: dict, results: list[dict]) -> None:
+    for r in results:
+        cfg = data["pocket"].get(r["person_id"])
+        if cfg is not None:
+            cfg["settled"] = r["end"].isoformat()
+        data["pocket_history"].append({"person_id": r["person_id"], "start": r["start"].isoformat(), "end": r["end"].isoformat(),
+                                       "earned": r["earned"], "target": r["target"], "amount": r["amount"], "paid": r["paid"],
+                                       "account": r["account"]})
+    del data["pocket_history"][:-80]
+
+
+def pocket_progress(data: dict, today: date, to_local=_default_local) -> dict:
+    """For each person with pocket money on: this week's or month's points so far."""
+    out = {}
+    for pid, cfg in data.get("pocket", {}).items():
+        start = period_start(cfg["period"], today)
+        end = next_period_start(cfg["period"], today)
+        out[pid] = {**cfg, "start": start.isoformat(), "end": end.isoformat(), "earned": earned_in(data, pid, start, end, to_local),
+                    "starts_next": bool(cfg.get("enabled") and cfg.get("since") and _first_period(cfg) > start)}
     return out
 
 
@@ -391,6 +626,7 @@ def mark_reminded(data: dict, chore: dict, day: date) -> None:
 
 
 def prune(data: dict, today: date, keep_days: int = 120) -> None:
+    del data.setdefault("redemptions", [])[:-200]
     cutoff = (today - timedelta(days=keep_days)).isoformat()
     for bucket in ("instances", "gens", "reminded"):
         for key in [k for k in data[bucket] if k.split(":", 2)[1] < cutoff]:

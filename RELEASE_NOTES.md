@@ -1,6 +1,6 @@
 # Release notes
 
-## Unreleased
+## 0.1.0-beta.5
 
 - **Chores** (new part of the hub, can be switched off like Shopping and Meals):
   - Assign a chore to one person, several, or **Anyone**. Repeat **Daily, Weekly** (pick the days) or **Custom** (every N days, weeks or months).
@@ -10,6 +10,22 @@
   - A **standard list** of about 30 chores (with emojis) and two standard routines to start from.
   - Points: balances for everyone, a history, and adults can add or take away points.
 - **People & guests**: every Home Assistant user gets a profile; adults can add children and guests who have **no Home Assistant login**, give each a role (adult, child, guest), an emoji and an optional PIN, and pick who is using a shared tablet. Guests only see chores assigned to them.
+- **Calendar** (new part, own tab, can be switched off): family events for school, sport, appointments, reminders and birthdays.
+  - **Month, Week, Day and Agenda** views. In the month view a day card next to the month lists the chores and events of the day you tap; put it on the **right, left, bottom or top** (Calendar settings, per device).
+  - Events: type (School, Sport, Appointment, Reminder, Birthday, Family, Other), emoji, who it is for, all day or timed, multi-day trips, **repeats** (daily, weekly on chosen days, monthly, yearly, custom, with an optional end date), location, notes and a **reminder** (at the time, 10/30 minutes, 1 hour or 1 day before) sent like chore reminders. A `ksh_calendar_reminder` event fires too.
+  - Shows your **chores** on the days they are due, and any **Home Assistant calendars** you switch on (Google, local, school, holidays...), read only.
+  - Quick add has Event, Reminders and Birthdays now. Guests only see events they are on.
+- **Chores**: routine **steps have their own days** (pack the school bag on weekdays only, brush teeth every day); chores have a **starting date** and a **Once** option; a chore is **overdue** only after its day has ended or its due time has passed, never before it starts, and an Overdue section shows on Today; Today has an **All / Chores / Routines / Calendar** switch.
+- **PIN logins**: a person with a PIN can pick their own name on any device and tick off their own chores and routines. On a shared login the integration now checks the PIN itself (a token is kept on that device); an adult profile needs a PIN there, so a child cannot pick it. Anyone can set or change their own PIN from Chores > Settings; five wrong tries lock it for a minute.
+- **Celebrations**: when a child finishes a chore or routine an animation plays (ticker tape, fireworks, balloons or a star shower, or off). Each person picks their own under Chores > Settings > Celebration; adults can pick for anyone. A short one for a chore, a bigger one for a routine or the last chore of the day. Chores ticked in the calendar's Day view celebrate too.
+- Calendar: chores can be shown in the Day, Week, Agenda and Month views (per device) and ticked off from the Day view; the faces (picture or emoji, in the person's colour) of who each event or chore is for sit on the left or right of its card (per device); the two month/face settings sit side by side on a wide display.
+- Settings: Parts of the hub and Menu order are now one **Menu** list with arrows and switches.
+- **Finance** (new part, can be switched off): pocket money. Every child has a **Cash** account and a **Bank** account and sees what they have and what it was spent on. Adults add money, record a purchase (taken from Cash, Bank or some of each, never below zero), move money between Cash and Bank, and can undo an entry. A child only sees their own.
+- **Spend your points** (Chores > Points): a list of rewards with a points cost, with 12 standard ones to start from (screen time, choose dinner, ice cream, sleepover...). A child asks, an adult says yes and the points are spent once; an adult spends straight away.
+- **Pocket money rules** (Chores > Points), per child: how many points to earn each week or month, how much it pays, and whether it goes into Cash or Bank. When the week or month ends it is paid into their Finance account automatically, once. It starts with the next full week or month; chores and routines count, bonuses do not.
+- The empty **Routines** menu entry is gone (routines live in Chores). **Finances** is back as the new Finance part.
+- Chores settings: the duplicate "Who is using this device" block is gone; tap your name at the top to switch.
+- **Menu order and access**: each login can move the menu entries into the order it wants (Settings > Menu order); administrators can hide entries from individual people (Settings > Who can see what). Hiding only tidies the menu, it is not a lock. The Finances entry is gone.
 - Menu: People & guests; Quick add > Chores opens the add-a-chore list.
 - Pop-ups close by swiping them down.
 - Tablet: the logo sits top left with the menu below it; the household name has no label; the logo is a little bigger.

@@ -8,6 +8,8 @@
           "enable_recipes": "Recipes & Meal Planner",
           "enable_shopping": "Shopping Lists",
           "enable_chores": "Chores & Routines",
+          "enable_calendar": "Calendar",
+          "enable_finance": "Finance (pocket money)",
           "country": "Country (shopping catalogue)"
         }
       }
@@ -24,6 +26,8 @@
           "enable_recipes": "Recipes & Meal Planner",
           "enable_shopping": "Shopping Lists",
           "enable_chores": "Chores & Routines",
+          "enable_calendar": "Calendar",
+          "enable_finance": "Finance (pocket money)",
           "country": "Country (shopping catalogue)",
           "enable_price_tracking": "Enable price tracking",
           "enable_image_search": "Enable image search",
@@ -34,6 +38,8 @@
           "enable_recipes": "Recipes, meal planner and cooking timers.",
           "enable_shopping": "Shopping lists, product catalogue, loyalty cards and supermarkets.",
           "enable_chores": "Chores, routines and a points balance for the family.",
+          "enable_calendar": "Family calendar: school, sport, appointments, reminders and Home Assistant calendars.",
+          "enable_finance": "Pocket money: a Cash and a Bank account for each child.",
           "show_panel": "Adds a full-screen Family Hub entry to the Home Assistant sidebar."
         }
       }

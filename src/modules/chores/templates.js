@@ -42,16 +42,33 @@ export const ROUTINE_TEMPLATES = [
     name: 'Morning routine', emoji: '☀️', kind: 'morning', points: 3,
     steps: [
       { text: 'Get dressed', emoji: '👕' }, { text: 'Eat breakfast', emoji: '🥣' }, { text: 'Brush teeth', emoji: '🪥' },
-      { text: 'Pack school bag', emoji: '🎒' }, { text: 'Shoes on', emoji: '👟' },
+      { text: 'Pack school bag', emoji: '🎒', days: [0, 1, 2, 3, 4] }, { text: 'Shoes on', emoji: '👟' },
     ],
   },
   {
     name: 'Evening routine', emoji: '🌙', kind: 'evening', points: 3,
     steps: [
       { text: 'Tidy toys away', emoji: '🧸' }, { text: 'Dishes to the bench', emoji: '🍽️' }, { text: 'Bath or shower', emoji: '🛁' },
+      { text: 'Put school bag by the door', emoji: '🎒', days: [0, 1, 2, 3, 6] },
       { text: 'Pyjamas on', emoji: '🩳' }, { text: 'Brush teeth', emoji: '🪥' }, { text: 'Read a book', emoji: '📖' },
     ],
   },
+];
+
+// Standard things points can be spent on (an adult adds the ones the family wants, and can change the cost)
+export const REWARD_TEMPLATES = [
+  { name: 'Extra screen time (30 minutes)', emoji: '📺', cost: 15 },
+  { name: 'Pick the family game', emoji: '🎲', cost: 10 },
+  { name: 'Stay up 30 minutes later', emoji: '🌙', cost: 20 },
+  { name: 'Choose what is for dinner', emoji: '🍽️', cost: 20 },
+  { name: 'Pick the movie night film', emoji: '🎬', cost: 20 },
+  { name: 'Ice cream treat', emoji: '🍦', cost: 25 },
+  { name: 'Trip to the park', emoji: '🛝', cost: 25 },
+  { name: 'Friend over to play', emoji: '🧸', cost: 40 },
+  { name: 'Takeaway night pick', emoji: '🍕', cost: 50 },
+  { name: 'Sleepover with a friend', emoji: '🛏️', cost: 60 },
+  { name: 'Choose a family outing', emoji: '🎳', cost: 80 },
+  { name: 'New small toy or book', emoji: '🧩', cost: 100 },
 ];
 
 export const EMOJIS = ['✅', '🧹', '🧺', '🍽️', '🗑️', '🛏️', '🪥', '📚', '🐶', '🐱', '🌱', '🚗', '🧸', '🎒', '🍳', '🪴',

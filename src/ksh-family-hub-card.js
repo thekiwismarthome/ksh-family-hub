@@ -2,7 +2,8 @@ import { LitElement, html, css, nothing } from 'lit';
 import { keyed } from 'lit/directives/keyed.js';
 import { CARD_VERSION } from 'virtual:card-version';
 import { enableSwipeClose } from './hub/swipe.js';
-import { ITEMS, SUB_TABS, visibleItems, itemById } from './hub/modules.js';
+import { SUB_TABS, visibleItems, orderItems, itemById, BAR_SLOTS } from './hub/modules.js';
+import { resolveActing, ACTING_EVENT } from './hub/actor.js';
 import { hubTokens } from './hub/hub-styles.js';
 import './hub/ksh-hub-home.js';
 import './hub/ksh-hub-settings.js';
@@ -11,6 +12,8 @@ import './hub/ksh-hub-sheets.js';
 import './modules/recipes/recipe-manager-card.js';    // <ksh-recipes-module>
 import './modules/shopping/shopping-list-manager-card.js'; // <ksh-shopping-module>
 import './modules/chores/ksh-chores-module.js';           // <ksh-chores-module>
+import './modules/calendar/ksh-calendar-module.js';       // <ksh-calendar-module>
+import './modules/finance/ksh-finance-module.js';         // <ksh-finance-module>
 
 const ROUTE_KEY = 'ksh_hub_route';
 const THEME_KEY = 'ksh_hub_theme';
@@ -20,8 +23,8 @@ const RAIL_MIN_WIDTH = 700;
 const LOGO_URL = `/ksh_family_hub/static/ksh-logo.png?v=${CARD_VERSION}`;
 
 // Menu entries backed by a real module element
-const MODULE_ELEMENT = { shopping: 'ksh-shopping-module', cards: 'ksh-shopping-module', meals: 'ksh-recipes-module', chores: 'ksh-chores-module' };
-const MODULE_DEFAULT_VIEW = { shopping: 'shopping', meals: 'grid', chores: 'today' };
+const MODULE_ELEMENT = { shopping: 'ksh-shopping-module', cards: 'ksh-shopping-module', meals: 'ksh-recipes-module', chores: 'ksh-chores-module', calendar: 'ksh-calendar-module', finance: 'ksh-finance-module' };
+const MODULE_DEFAULT_VIEW = { shopping: 'shopping', meals: 'grid', chores: 'today', calendar: 'month', finance: 'overview' };
 // Sub views that take over the whole module (the module's own header has a back button)
 const HIDE_TABS_IN = { meals: ['detail', 'add'] };
 
@@ -47,6 +50,9 @@ export class KshFamilyHubCard extends LitElement {
     _sheet: { state: true },
     _language: { state: true },
     _subView: { state: true },
+    _prefs: { state: true },
+    _people: { state: true },
+    _actingId: { state: true },
     _gen: { state: true },
     _applying: { state: true },
     _applyError: { state: true },
@@ -67,6 +73,10 @@ export class KshFamilyHubCard extends LitElement {
     this._sheet = null;
     this._language = this._readLanguage();
     this._subView = {};
+    this._prefs = { order: [], blocked: {} };
+    this._people = [];
+    this._me = null;
+    this._actingId = null;
     this._gen = 0;
     this._visited = new Set();
     if (!['home', 'settings'].includes(this._route)) this._visited.add(this._route === 'cards' ? 'shopping' : this._route);
@@ -91,6 +101,10 @@ export class KshFamilyHubCard extends LitElement {
     this._ro.observe(this);
     this._onKey = e => { if (e.key === 'Escape' && this._moreOpen) this._moreOpen = false; };
     window.addEventListener('keydown', this._onKey);
+    this._onActing = () => this._refreshActing();
+    window.addEventListener(ACTING_EVENT, this._onActing);
+    this._onVisible = () => { if (!document.hidden && this._infoRequested) this._loadPrefs(); };
+    document.addEventListener('visibilitychange', this._onVisible);
     this._onResize = () => this._updateHeight();
     window.addEventListener('resize', this._onResize);
     window.visualViewport?.addEventListener('resize', this._onResize);
@@ -103,6 +117,8 @@ export class KshFamilyHubCard extends LitElement {
     super.disconnectedCallback();
     this._ro?.disconnect();
     window.removeEventListener('keydown', this._onKey);
+    window.removeEventListener(ACTING_EVENT, this._onActing);
+    document.removeEventListener('visibilitychange', this._onVisible);
     window.removeEventListener('resize', this._onResize);
     window.visualViewport?.removeEventListener('resize', this._onResize);
   }
@@ -121,6 +137,7 @@ export class KshFamilyHubCard extends LitElement {
       this._infoRequested = true;
       this._loadInfo();
       this._loadHouseholds();
+      this._loadPrefs();
     }
   }
 
@@ -153,6 +170,50 @@ export class KshFamilyHubCard extends LitElement {
     } catch (err) {
       this._error = err?.message || 'unknown_error';
     }
+  }
+
+  // ---- menu preferences: each login's order, and what each person is not shown ------------
+
+  async _loadPrefs() {
+    try {
+      const [prefs, people] = await Promise.all([
+        this.hass.callWS({ type: 'ksh_family_hub/prefs/get' }),
+        this.hass.callWS({ type: 'ksh_family_hub/people/list' }),
+      ]);
+      this._prefs = { order: prefs.order || [], blocked: prefs.blocked || {} };
+      this._people = people.people;
+      this._me = people.me;
+      this._refreshActing();
+    } catch { /* the menu simply stays in its default order */ }
+  }
+
+  _refreshActing() {
+    this._actingId = resolveActing(this.hass, this._people, this._me);
+    if (this._info && !this._available(this._route)) this._setRoute('home');
+  }
+
+  /** Menu entries the person using this device may not see */
+  get _blocked() { return this._prefs.blocked[this._actingId] || []; }
+
+  /** Hidden for everyone by an administrator, plus hidden from the person using this device */
+  get _hiddenAll() { return [...new Set([...(this._info?.hidden || []), ...this._blocked])]; }
+
+  /** What the menus show: available, not hidden from this person, in this login's order */
+  get _menuItems() {
+    return orderItems(visibleItems(this._info?.modules, this._hiddenAll), this._prefs.order);
+  }
+
+  async _saveOrder(order) {
+    this._prefs = { ...this._prefs, order };
+    try { await this.hass.callWS({ type: 'ksh_family_hub/prefs/set_order', order }); } catch { /* keeps the local order */ }
+  }
+
+  async _saveAccess(personId, hidden) {
+    const before = this._prefs.blocked;
+    this._prefs = { ...this._prefs, blocked: { ...before, [personId]: hidden } };
+    if (!hidden.length) { const { [personId]: _gone, ...rest } = this._prefs.blocked; this._prefs = { ...this._prefs, blocked: rest }; }
+    try { await this.hass.callWS({ type: 'ksh_family_hub/prefs/set_access', person_id: personId, hidden }); }
+    catch { this._prefs = { ...this._prefs, blocked: before }; }
   }
 
   /**
@@ -189,7 +250,7 @@ export class KshFamilyHubCard extends LitElement {
         const patch = this._pending;
         this._pending = null;
         const res = await this.hass.callWS({ type: 'ksh_family_hub/set_modules', ...patch });
-        const moduleChange = ['recipes', 'shopping'].some(k => k in patch);
+        const moduleChange = ['recipes', 'shopping', 'chores', 'calendar', 'finance'].some(k => k in patch);
         if (moduleChange) await this._waitForModules(res.modules);
       }
       if (!this._pending) await this._loadInfo();
@@ -216,7 +277,7 @@ export class KshFamilyHubCard extends LitElement {
 
   _available(id) {
     if (id === 'settings') return true;
-    return visibleItems(this._info?.modules, this._info?.hidden).some(i => i.id === id);
+    return visibleItems(this._info?.modules, this._hiddenAll).some(i => i.id === id);
   }
 
   _setRoute(id) {
@@ -245,7 +306,7 @@ export class KshFamilyHubCard extends LitElement {
     this._subView = { ...this._subView, [this._route]: view };
     if (!el) return;
     if (this._route === 'shopping') el.currentView = view;
-    else if (this._route === 'meals' || this._route === 'chores') el.setHubView(view);
+    else if (['meals', 'chores', 'calendar', 'finance'].includes(this._route)) el.setHubView(view);
   }
 
   // ---- households -----------------------------------------------------------
@@ -310,6 +371,18 @@ export class KshFamilyHubCard extends LitElement {
     }
   }
 
+  // Quick add > Event / Reminders / Birthdays: open the new-event form on the calendar
+  async _quickEvent(kind) {
+    this._sheet = null;
+    this._setRoute('calendar');
+    for (let i = 0; i < 20; i++) {
+      await this.updateComplete;
+      const el = this.renderRoot.querySelector('#mod-calendar');
+      if (el?.openAdd) { el.openAdd(kind); return; }
+      await new Promise(r => setTimeout(r, 100));
+    }
+  }
+
   _topbar() {
     const route = this._route;
     const home = route === 'home';
@@ -343,7 +416,7 @@ export class KshFamilyHubCard extends LitElement {
     if (this._error) return this._renderError();
     if (!this._info) return html`<div class="center"><div class="spinner"></div></div>`;
 
-    const items = visibleItems(this._info.modules, this._info.hidden);
+    const items = this._menuItems;
     return html`
       <div class="shell">
         ${this._topbar()}
@@ -357,14 +430,14 @@ export class KshFamilyHubCard extends LitElement {
       </div>
       ${this._moreOpen ? this._renderMore(items) : nothing}
       <ksh-hub-sheets .hass=${this.hass} .sheet=${this._sheet} .households=${this._households} .activeId=${this._householdId}
-        .modules=${this._info.modules} .hidden=${this._info.hidden} .panel=${this._isPanel} .language=${this._language}
+        .modules=${this._info.modules} .hidden=${this._hiddenAll} .panel=${this._isPanel} .language=${this._language}
         @hub-close=${() => { this._sheet = null; }}
         @hub-sheet=${e => { this._sheet = e.detail.sheet; }}
         @hub-household-select=${e => this._selectHousehold(e.detail.id)}
         @hub-households-changed=${e => this._loadHouseholds(e.detail.select)}
         @hub-open-settings=${() => { this._sheet = null; this._setRoute('settings'); }}
         @hub-set-language=${e => this._setLanguage(e.detail.code)}
-        @hub-quick=${e => { if (e.detail.id === 'meals') this._quickRecipe(); else if (e.detail.id === 'chores') this._quickChore(); }}
+        @hub-quick=${e => { const id = e.detail.id; if (id === 'meals') this._quickRecipe(); else if (id === 'chores') this._quickChore(); else if (['event', 'reminders', 'birthdays'].includes(id)) this._quickEvent(id); }}
         @hub-region-changed=${() => { this._gen++; }}
         @hass-toggle-menu=${() => { this._sheet = null; }}></ksh-hub-sheets>
     `;
@@ -396,13 +469,16 @@ export class KshFamilyHubCard extends LitElement {
 
     return html`
       ${route === 'home' ? html`
-        <ksh-hub-home .hass=${this.hass} .modules=${this._info.modules} .hidden=${this._info.hidden} .dark=${dark} .panel=${this._isPanel}
+        <ksh-hub-home .hass=${this.hass} .modules=${this._info.modules} .hidden=${this._hiddenAll} .dark=${dark} .panel=${this._isPanel}
           @hub-navigate=${this._onNavigate}
           @hub-open-settings=${() => this._setRoute('settings')}></ksh-hub-home>` : nothing}
 
       ${route === 'settings' ? html`
         <ksh-hub-settings .hass=${this.hass} .info=${this._info} .theme=${this._theme} .palette=${this._palette}
           .cardVersion=${CARD_VERSION} .applying=${this._applying} .applyError=${this._applyError}
+          .prefs=${this._prefs} .people=${this._people} .order=${this._menuItems.map(i => i.id)}
+          @hub-order=${e => this._saveOrder(e.detail.order)}
+          @hub-access=${e => this._saveAccess(e.detail.person, e.detail.hidden)}
           @hub-theme=${e => this._setTheme(e.detail.theme)}
           @hub-palette=${e => { this._palette = e.detail.palette; store.set(PALETTE_KEY, this._palette); }}
           @hub-config=${e => this._applyConfig(e.detail)}
@@ -440,9 +516,21 @@ export class KshFamilyHubCard extends LitElement {
           </div>` : nothing}
         ${this._visited.has('chores') && this._info.modules.chores ? html`
           <div class="module" ?hidden=${route !== 'chores'}>
-            <ksh-chores-module id="mod-chores" hub-mode .hass=${this.hass}
+            <ksh-chores-module id="mod-chores" hub-mode .hass=${this.hass} .modules=${this._info.modules}
               @hub-sheet=${e => { this._sheet = e.detail.sheet; }}
+              @hub-navigate=${this._onNavigate}
               @module-view-changed=${e => this._onModuleView('chores', e)}></ksh-chores-module>
+          </div>` : nothing}
+        ${this._visited.has('calendar') && this._info.modules.calendar ? html`
+          <div class="module" ?hidden=${route !== 'calendar'}>
+            <ksh-calendar-module id="mod-calendar" hub-mode .hass=${this.hass} .modules=${this._info.modules}
+              @hub-sheet=${e => { this._sheet = e.detail.sheet; }}
+              @module-view-changed=${e => this._onModuleView('calendar', e)}></ksh-calendar-module>
+          </div>` : nothing}
+        ${this._visited.has('finance') && this._info.modules.finance ? html`
+          <div class="module" ?hidden=${route !== 'finance'}>
+            <ksh-finance-module id="mod-finance" hub-mode .hass=${this.hass} .modules=${this._info.modules}
+              @module-view-changed=${e => this._onModuleView('finance', e)}></ksh-finance-module>
           </div>` : nothing}
       `)}
     `;
@@ -456,7 +544,7 @@ export class KshFamilyHubCard extends LitElement {
   }
 
   _renderBar(items) {
-    const primary = items.filter(i => i.primary);
+    const primary = [...items.filter(i => i.home), ...items.filter(i => !i.home).slice(0, BAR_SLOTS)];
     const moreActive = !primary.some(i => i.id === this._route) && this._route !== 'settings';
     return html`
       <nav class="bar" aria-label="Main">

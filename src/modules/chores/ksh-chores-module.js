@@ -1,7 +1,10 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { enableSwipeClose } from '../../hub/swipe.js';
-import { getActing, setActing } from '../../hub/actor.js';
-import { CHORE_TEMPLATES, ROUTINE_TEMPLATES, EMOJIS, DAY_NAMES } from './templates.js';
+import { setActing, setToken, resolveActing, actingMsg } from '../../hub/actor.js';
+import { loadEvents, timeLabel, iso as isoOf } from '../calendar/data.js';
+import { celebrate, CELEBRATIONS, DEFAULT_CELEBRATION } from '../../hub/celebrate.js';
+import { CHORE_TEMPLATES, ROUTINE_TEMPLATES, REWARD_TEMPLATES, EMOJIS, DAY_NAMES } from './templates.js';
+import { money, parseMoney, moneyInput } from '../../hub/money.js';
 
 const ACCENT = '#3db6cc';
 
@@ -10,17 +13,23 @@ const todayIso = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
+const todayWeekday = () => (new Date().getDay() + 6) % 7;      // Monday = 0
+const WEEKDAYS = [0, 1, 2, 3, 4];
+const WEEKENDS = [5, 6];
+const sameDays = (a = [], b = []) => a.length === b.length && a.every(x => b.includes(x));
+
 const blankChore = () => ({
-  name: '', emoji: '✅', points: 1, assignees: [], recurrence: { type: 'daily' },
+  name: '', emoji: '✅', points: 1, assignees: [], recurrence: { type: 'daily' }, start: todayIso(),
   due_time: '', remind: true, requires_approval: true, notes: '',
 });
 
-const blankRoutine = () => ({ name: '', emoji: '☀️', kind: 'custom', points: 3, assignees: [], steps: [{ text: '', emoji: '' }] });
+const blankRoutine = () => ({ name: '', emoji: '☀️', kind: 'custom', points: 3, assignees: [], steps: [{ text: '', emoji: '', days: [] }] });
 
 /** Chores, routines and points. Used inside the hub shell only. */
 class KshChoresModule extends LitElement {
   static properties = {
     hass: { type: Object },
+    modules: { type: Object },
     hubMode: { type: Boolean, attribute: 'hub-mode' },
     _view: { state: true },
     _people: { state: true },
@@ -34,6 +43,9 @@ class KshChoresModule extends LitElement {
     _search: { state: true },
     _pin: { state: true },
     _acting: { state: true },
+    _seg: { state: true },
+    _agenda: { state: true },
+    _celFor: { state: true },
   };
 
   constructor() {
@@ -50,7 +62,19 @@ class KshChoresModule extends LitElement {
     this._search = '';
     this._pin = '';
     this._acting = null;
+    this._seg = this._readSeg();
+    this._agenda = null;
+    this._celFor = null;
+    this._pin2 = '';
     this._initDone = false;
+  }
+
+  _readSeg() { try { return localStorage.getItem('ksh_chores_today') || 'all'; } catch { return 'all'; } }
+
+  _setSeg(seg) {
+    this._seg = seg;
+    try { localStorage.setItem('ksh_chores_today', seg); } catch { /* ignore */ }
+    if (seg === 'calendar' || seg === 'all') this._loadAgenda();
   }
 
   // ---- hub hooks -------------------------------------------------------------
@@ -117,19 +141,25 @@ class KshChoresModule extends LitElement {
       this._state = state;
       this._resolveActing();
       this._loaded = true;
+      if (this._seg === 'calendar' || this._seg === 'all') this._loadAgenda();
     } catch (err) {
       this._loaded = true;
       this._say(err?.message || 'Could not load chores');
     }
   }
 
-  _resolveActing() {
-    const admin = !!this.hass.user?.is_admin;
-    const stored = getActing(this.hass);
-    const ok = id => id && this._people.some(p => p.id === id);
-    if (!admin && this._me) this._acting = this._me;
-    else if (ok(stored)) this._acting = stored;
-    else this._acting = this._me || null;
+  _resolveActing() { this._acting = resolveActing(this.hass, this._people, this._me); }
+
+  get _hasCalendar() { return !!this.modules?.calendar; }
+
+  async _loadAgenda() {
+    if (!this._hasCalendar) { this._agenda = null; return; }
+    try {
+      const day = todayIso();
+      const res = await loadEvents(this.hass, day, day, { acting: this._actor, modules: this.modules, msg: actingMsg(this.hass, this._acting) });
+      // chores are already on this page; the calendar part shows events
+      this._agenda = res.events.filter(e => e.kind !== 'chore');
+    } catch { this._agenda = []; }
   }
 
   get _actor() { return this._people.find(p => p.id === this._acting) || null; }
@@ -140,12 +170,12 @@ class KshChoresModule extends LitElement {
   _chore(id) { return this._state?.chores.find(c => c.id === id); }
 
   async _call(type, extra = {}) {
-    const msg = { type: `ksh_chores/${type}`, ...extra };
-    if (this._acting) msg.as_person = this._acting;
+    const msg = { type: `ksh_chores/${type}`, ...extra, ...actingMsg(this.hass, this._acting) };
     try {
       const res = await this.hass.callWS(msg);
       return res;
     } catch (err) {
+      if (err?.code === 'pin_required' && this._actor?.has_pin) { this._sheet = { type: 'pin', person: this._actor, stay: true }; this._pin = ''; }
       this._say(err?.message || 'That did not work');
       return null;
     } finally {
@@ -187,17 +217,34 @@ class KshChoresModule extends LitElement {
     return 'Daily';
   }
 
+  // Late means: an earlier day that was not finished, or today and the due time has passed. A chore without a
+  // due time is only late once its day is over, and never before it starts.
   _overdue(chore, item) {
-    if (!chore.due_time || this._state?.date !== todayIso() || !['open', 'rejected'].includes(item.status)) return false;
+    if (!['open', 'rejected'].includes(item.status)) return false;
+    if (item.date < todayIso()) return true;
+    if (!chore.due_time || item.date !== todayIso()) return false;
     const now = new Date();
     return chore.due_time < `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  }
+
+  /** The day before an ISO date (a period's end is the first day after it), in local time */
+  _dayBefore(day) {
+    const [y, m, d] = day.split('-').map(Number);
+    return isoOf(new Date(y, m - 1, d - 1));
+  }
+
+  _dateLabel(day) {
+    return new Date(`${day}T12:00:00`).toLocaleDateString(this.hass.locale?.language || undefined, { weekday: 'short', day: 'numeric', month: 'short' });
   }
 
   // ---- actions ------------------------------------------------------------------------
 
   async _complete(item) {
     const chore = this._chore(item.chore_id);
+    // the last thing on today's list earns the bigger celebration
+    const left = this._state.items.filter(i => ['open', 'rejected'].includes(i.status) && this._chore(i.chore_id) && this._visible(this._chore(i.chore_id))).length;
     const res = await this._call('complete', { chore_id: item.chore_id, date: item.date });
+    if (res) celebrate(this, res.celebration, { big: left <= 1 });
     if (res?.awarded) this._say(`+${chore.points} ★  ${chore.name}`);
     else if (res?.status === 'done') this._say('Done. Waiting for an adult to approve.');
   }
@@ -226,12 +273,13 @@ class KshChoresModule extends LitElement {
   _newChoreFrom(template) {
     this._draft = { ...blankChore(), ...(template ? {
       name: template.name, emoji: template.emoji, points: template.points, recurrence: { ...template.recurrence },
-    } : {}) };
+    } : {}), start: todayIso() };
     this._sheet = { type: 'chore' };
   }
 
   _editChore(chore) {
-    this._draft = { ...blankChore(), ...JSON.parse(JSON.stringify(chore)), due_time: chore.due_time || '' };
+    this._draft = { ...blankChore(), ...JSON.parse(JSON.stringify(chore)), due_time: chore.due_time || '', start: chore.start || todayIso() };
+    if (chore.recurrence?.type === 'once') this._draft.start = chore.recurrence.date;
     this._sheet = { type: 'chore', id: chore.id };
   }
 
@@ -251,19 +299,22 @@ class KshChoresModule extends LitElement {
 
   _setRecType(type) {
     const keep = { days: this._draft.recurrence.days || [] };
-    if (type === 'daily') this._draft = { ...this._draft, recurrence: { type } };
+    if (type === 'daily' || type === 'once') this._draft = { ...this._draft, recurrence: { type } };
     else if (type === 'weekly') this._draft = { ...this._draft, recurrence: { type, ...keep } };
-    else this._draft = { ...this._draft, recurrence: { type: 'custom', every: this._draft.recurrence.every || 2, unit: this._draft.recurrence.unit || 'day', start: this._draft.recurrence.start || todayIso(), ...keep } };
+    else this._draft = { ...this._draft, recurrence: { type: 'custom', every: this._draft.recurrence.every || 2, unit: this._draft.recurrence.unit || 'day', start: this._draft.start || todayIso(), ...keep } };
   }
 
   async _saveChore() {
     const d = this._draft;
     if (!d.name.trim()) { this._say('Give the chore a name'); return; }
     const rec = { ...d.recurrence };
+    const start = d.start || todayIso();
+    if (rec.type === 'once') rec.date = start;
+    if (rec.type === 'custom') rec.start = start;
     if (rec.type === 'weekly' && !(rec.days || []).length) rec.days = [((new Date().getDay() + 6) % 7)];
     if (rec.type === 'custom' && rec.unit === 'week' && !(rec.days || []).length) rec.days = [((new Date().getDay() + 6) % 7)];
     const fields = {
-      name: d.name.trim(), emoji: d.emoji, points: Number(d.points) || 0, assignees: d.assignees, recurrence: rec,
+      name: d.name.trim(), emoji: d.emoji, points: Number(d.points) || 0, assignees: d.assignees, recurrence: rec, start,
       due_time: d.due_time || null, remind: !!d.remind && !!d.due_time, requires_approval: !!d.requires_approval, notes: d.notes || '',
     };
     const id = this._sheet?.id;
@@ -305,7 +356,7 @@ class KshChoresModule extends LitElement {
   async _saveRoutine() {
     const d = this._draft;
     if (!d.name.trim()) { this._say('Give the routine a name'); return; }
-    const steps = d.steps.filter(s => s.text.trim());
+    const steps = d.steps.filter(st => st.text.trim()).map(st => ({ ...st, days: st.days || [] }));
     if (!steps.length) { this._say('Add at least one step'); return; }
     const fields = { name: d.name.trim(), emoji: d.emoji, kind: d.kind, points: Number(d.points) || 0, assignees: d.assignees, steps };
     const id = this._sheet?.id;
@@ -323,30 +374,91 @@ class KshChoresModule extends LitElement {
 
   async _toggleStep(routine, stepId, done) {
     const res = await this._call('routines/step', { routine_id: routine.id, step_id: stepId, done });
-    if (res?.awarded) { this._sheet = { type: 'celebrate', routine }; }
+    if (res?.awarded) { this._sheet = { type: 'celebrate', routine }; celebrate(this, res.celebration, { big: true }); }
   }
 
   // ---- people ----------------------------------------------------------------------
 
   async _switchTo(person) {
     if (person.has_pin) { this._sheet = { type: 'pin', person }; this._pin = ''; return; }
+    if (!this.hass.user?.is_admin && person.role === 'adult') {
+      this._say(`${person.name} needs a PIN before this profile can be used on a shared login. An administrator can set one under Manage people.`);
+      return;
+    }
     this._applySwitch(person);
   }
 
-  _applySwitch(person) {
-    setActing(this.hass, person.id);
+  _applySwitch(person, token = null) {
+    setActing(this.hass, person.id, token);
     this._acting = person.id;
     this._closeSheet();
     this._filter = 'all';
+    this._agenda = null;
+    this._load();
   }
 
   async _checkPin() {
-    const person = this._sheet.person;
+    const { person, stay } = this._sheet;
     try {
       const res = await this.hass.callWS({ type: 'ksh_family_hub/people/verify_pin', person_id: person.id, pin: this._pin });
-      if (res.ok) this._applySwitch(person);
-      else { this._pin = ''; this._say('Wrong PIN'); }
-    } catch (err) { this._say(err?.message || 'Could not check the PIN'); }
+      if (!res.ok) { this._pin = ''; this._say('Wrong PIN'); return; }
+      if (stay) { setToken(this.hass, res.token); this._closeSheet(); this._load(); }
+      else this._applySwitch(person, res.token);
+    } catch (err) { this._pin = ''; this._say(err?.message || 'Could not check the PIN'); }
+  }
+
+  // ---- celebration: each person chooses their own ------------------------------------------------
+
+  _celebrationOf(personId) { return this._state?.celebrations?.[personId] || DEFAULT_CELEBRATION; }
+
+  async _chooseCelebration(personId, style) {
+    if (style !== 'off') celebrate(this, style, { big: true, force: true });
+    if (this._state) this._state = { ...this._state, celebrations: { ...(this._state.celebrations || {}), [personId]: style } };
+    await this._call('celebration/set', { person_id: personId, style });
+  }
+
+  _celebrationSection() {
+    const a = this._actor;
+    if (!a) return nothing;
+    const who = (this._isAdult && this._people.find(p => p.id === this._celFor)) || a;
+    const style = this._celebrationOf(who.id);
+    return html`
+      <h3>Celebration</h3>
+      ${this._isAdult && this._people.length > 1 ? html`
+        <div class="chips" role="radiogroup" aria-label="Choose for">
+          ${this._people.filter(p => p.role !== 'guest').map(p => html`<button class="chip ${p.id === who.id ? 'on' : ''}" @click=${() => { this._celFor = p.id; }}>${p.emoji} ${p.name}</button>`)}
+        </div>` : nothing}
+      <div class="card cels" role="radiogroup" aria-label="Celebration for ${who.name}">
+        ${CELEBRATIONS.map(c => html`
+          <button role="radio" aria-checked=${style === c.id ? 'true' : 'false'} class="cel ${style === c.id ? 'sel' : ''}" @click=${() => this._chooseCelebration(who.id, c.id)}>
+            <span class="ce">${c.icon}</span><b>${c.label}</b><small>${c.hint}</small>
+          </button>`)}
+        <button role="radio" aria-checked=${style === 'off' ? 'true' : 'false'} class="cel ${style === 'off' ? 'sel' : ''}" @click=${() => this._chooseCelebration(who.id, 'off')}>
+          <span class="ce">🚫</span><b>Off</b><small>No animation</small>
+        </button>
+      </div>
+      <p class="muted">Plays for ${who.name} when they finish a chore or routine: a short one for a chore, a bigger one for a whole routine or the last chore of the day.
+        Tap one to choose it and see it.
+        ${style !== 'off' ? html`<button class="link" @click=${() => celebrate(this, style, { big: true, force: true })}>Play again</button>` : nothing}
+        It stays still on a device that asks for reduced motion.</p>`;
+  }
+
+  _startPin() { this._pin = ''; this._pin2 = ''; this._sheet = { type: 'setpin' }; }
+
+  async _savePin(remove = false) {
+    const a = this._actor;
+    if (!a) return;
+    if (!remove) {
+      if (!/^\d{4}$/.test(this._pin)) { this._say('A PIN is four digits'); return; }
+      if (this._pin !== this._pin2) { this._say('The two PINs are different'); return; }
+    } else if (!confirm('Remove your PIN? Anyone using this device could switch to you.')) return;
+    try {
+      const res = await this.hass.callWS({ type: 'ksh_family_hub/people/set_pin', person_id: a.id, pin: remove ? null : this._pin, ...actingMsg(this.hass, this._acting) });
+      setToken(this.hass, res.token);
+      this._closeSheet();
+      this._say(remove ? 'PIN removed' : 'PIN saved');
+      this._load();
+    } catch (err) { this._say(err?.message || 'Could not save the PIN'); }
   }
 
   async _adjust() {
@@ -419,22 +531,35 @@ class KshChoresModule extends LitElement {
 
   // -- Today --
 
+  _segments() {
+    return [['all', 'All'], ['chores', 'Chores'], ['routines', 'Routines'], ...(this._hasCalendar ? [['calendar', 'Calendar']] : [])];
+  }
+
   _today() {
     const s = this._state;
-    const items = s.items.map(i => ({ ...i, chore: this._chore(i.chore_id) })).filter(i => i.chore && this._visible(i.chore));
+    const seg = this._segments().some(([k]) => k === this._seg) ? this._seg : 'all';
+    const mapItem = i => ({ ...i, chore: this._chore(i.chore_id) });
+    const items = s.items.map(mapItem).filter(i => i.chore && this._visible(i.chore));
+    const late = (s.overdue || []).map(mapItem).filter(i => i.chore && this._visible(i.chore));
     const todo = items.filter(i => ['open', 'rejected'].includes(i.status));
     const done = items.filter(i => ['done', 'approved'].includes(i.status));
     const waiting = this._isAdult ? s.pending.map(p => ({ ...p, chore: this._chore(p.chore_id) })).filter(p => p.chore) : [];
     const date = new Date().toLocaleDateString(this.hass.locale?.language || undefined, { weekday: 'long', day: 'numeric', month: 'long' });
+    const showChores = seg === 'all' || seg === 'chores';
+    const routines = this._routinesToday();
     return html`
       <p class="date">${date}</p>
-      ${this._isAdult && this._people.length > 1 ? html`
+      <div class="seg tabs" role="tablist" aria-label="Show">
+        ${this._segments().map(([k, l]) => html`<button role="tab" aria-selected=${seg === k ? 'true' : 'false'} class=${seg === k ? 'on' : ''} @click=${() => this._setSeg(k)}>${l}</button>`)}
+      </div>
+
+      ${showChores && this._isAdult && this._people.length > 1 ? html`
         <div class="chips" role="radiogroup" aria-label="Show chores for">
           <button class="chip ${this._filter === 'all' ? 'on' : ''}" @click=${() => { this._filter = 'all'; }}>Everyone</button>
           ${this._people.map(p => html`<button class="chip ${this._filter === p.id ? 'on' : ''}" @click=${() => { this._filter = p.id; }}>${p.emoji} ${p.name}</button>`)}
         </div>` : nothing}
 
-      ${waiting.length ? html`
+      ${showChores && waiting.length ? html`
         <h3>Waiting for approval</h3>
         <div class="card">${waiting.map(w => html`
           <div class="item">
@@ -444,12 +569,49 @@ class KshChoresModule extends LitElement {
             <button class="mini" @click=${() => this._reject(w)} aria-label="Send back"><ha-icon icon="mdi:undo"></ha-icon></button>
           </div>`)}</div>` : nothing}
 
-      <h3>To do ${todo.length ? html`<span class="count">${todo.length}</span>` : nothing}</h3>
-      ${todo.length ? html`<div class="card">${todo.map(i => this._item(i))}</div>`
-        : html`<div class="empty"><span>🎉</span><p>${items.length ? 'All done for today!' : 'No chores today.'}</p></div>`}
+      ${showChores && late.length ? html`
+        <h3 class="lateh">Overdue <span class="count late">${late.length}</span></h3>
+        <div class="card">${late.map(i => this._item(i))}</div>` : nothing}
 
-      ${done.length ? html`<h3>Done</h3><div class="card">${done.map(i => this._item(i))}</div>` : nothing}`;
+      ${seg === 'routines' || seg === 'all' ? (routines.length ? html`
+        <h3>Routines</h3>${routines.map(r => this._routineCard(r, { compact: true }))}`
+        : seg === 'routines' ? html`<div class="empty"><span>☀️</span><p>No routines for you today.</p></div>` : nothing) : nothing}
+
+      ${showChores ? html`
+        <h3>To do ${todo.length ? html`<span class="count">${todo.length}</span>` : nothing}</h3>
+        ${todo.length ? html`<div class="card">${todo.map(i => this._item(i))}</div>`
+          : html`<div class="empty"><span>🎉</span><p>${items.length ? 'All done for today!' : 'No chores today.'}</p></div>`}` : nothing}
+
+      ${seg === 'calendar' || seg === 'all' ? this._calendarToday(seg === 'calendar') : nothing}
+
+      ${showChores && done.length ? html`<h3>Done</h3><div class="card">${done.map(i => this._item(i))}</div>` : nothing}`;
   }
+
+  _calendarToday(full) {
+    if (!this._hasCalendar) return nothing;
+    const list = this._agenda;
+    if (!list || (!list.length && !full)) return list && !list.length ? nothing : html`<h3>Calendar</h3><p class="muted">Loading…</p>`;
+    return html`
+      <h3>Calendar today</h3>
+      ${list.length ? html`<div class="card">${list.map(e => html`
+        <div class="item small">
+          <span class="emoji" style="background:color-mix(in srgb, ${e.color} 22%, transparent)">${e.emoji}</span>
+          <span class="txt"><b>${e.title}</b>
+            <small>${timeLabel(e)}${e.location ? ` · ${e.location}` : ''}${(e.people || []).length ? ` · ${e.people.map(id => this._person(id)?.emoji || '').join(' ')}` : ''}</small></span>
+        </div>`)}</div>`
+        : html`<div class="empty"><span>🗓️</span><p>Nothing in the calendar today.</p></div>`}
+      <button class="link" @click=${() => this.dispatchEvent(new CustomEvent('hub-navigate', { detail: { id: 'calendar' }, bubbles: true, composed: true }))}>
+        <ha-icon icon="mdi:calendar-month-outline"></ha-icon>Open the calendar</button>`;
+  }
+
+  // Routines this person does today (a routine with no step today is left out)
+  _routinesToday() {
+    const mineOnly = r => this._isAdult || !(r.assignees || []).length ? (this._isAdult || this._role === 'child') : r.assignees.includes(this._acting);
+    return this._state.routines.filter(r => r.active !== false && mineOnly(r) && this._stepsToday(r).length)
+      .filter(r => !this._isAdult || this._filter === 'all' || !(r.assignees || []).length || r.assignees.includes(this._filter));
+  }
+
+  _stepsToday(r) { return r.steps.filter(st => !(st.days || []).length || st.days.includes(todayWeekday())); }
 
   _item(i) {
     const c = i.chore;
@@ -465,7 +627,8 @@ class KshChoresModule extends LitElement {
           <small>
             ${['done', 'approved'].includes(i.status) ? html`${this._person(i.done_by)?.emoji || ''} ${this._person(i.done_by)?.name || 'Someone'} did it`
               : assignees.length ? assignees.map(p => p.emoji).join(' ') + ' ' + assignees.map(p => p.name).join(', ') : 'Anyone'}
-            ${c.due_time ? html` · <span class=${overdue ? 'late' : ''}>${overdue ? 'Was due' : 'Due'} ${c.due_time}</span>` : nothing}
+            ${i.date < todayIso() ? html` · <span class="late">${this._dateLabel(i.date)}</span>`
+              : c.due_time ? html` · <span class=${overdue ? 'late' : ''}>${overdue ? 'Was due' : 'Due'} ${c.due_time}</span>` : nothing}
             ${c.points ? html` · +${c.points} ★` : nothing}
           </small>
           ${i.status === 'rejected' && i.note ? html`<small class="late">Sent back: ${i.note}</small>` : nothing}
@@ -504,6 +667,26 @@ class KshChoresModule extends LitElement {
 
   // -- Routines --
 
+  _routineCard(r, { compact = false } = {}) {
+    const run = this._run(r.id);
+    const steps = this._stepsToday(r);
+    const done = steps.filter(st => run.steps.includes(st.id)).length;
+    const can = this._isAdult || !(r.assignees || []).length ? true : r.assignees.includes(this._acting);
+    const who = (r.assignees || []).map(id => this._person(id)).filter(Boolean);
+    const none = !steps.length;
+    return html`
+      <div class="card routine ${run.completed ? 'finished' : ''}">
+        <button class="rhead" @click=${() => { this._sheet = { type: 'run', id: r.id }; }} ?disabled=${!can || none}>
+          <span class="emoji big">${r.emoji}</span>
+          <span class="txt"><b>${r.name}</b>
+            <small>${none ? 'No steps today' : `${steps.length} step${steps.length === 1 ? '' : 's'} today`} · +${r.points} ★ · ${who.length ? who.map(p => p.emoji + ' ' + p.name).join(', ') : 'Anyone'}</small></span>
+          <span class="pill ${run.completed ? 'okp' : ''}">${none ? '—' : run.completed ? '✓ Done' : done ? `${done}/${steps.length}` : 'Start'}</span>
+        </button>
+        <div class="bar"><i style="width:${steps.length ? (done / steps.length) * 100 : 0}%"></i></div>
+        ${this._isAdult && !compact ? html`<button class="link" @click=${() => this._editRoutine(r)}><ha-icon icon="mdi:pencil-outline"></ha-icon>Edit routine</button>` : nothing}
+      </div>`;
+  }
+
   _routines() {
     const all = this._state.routines;
     const mineOnly = r => this._isAdult || !(r.assignees || []).length ? (this._isAdult || this._role === 'child') : r.assignees.includes(this._acting);
@@ -513,26 +696,160 @@ class KshChoresModule extends LitElement {
         <h3 class="inline">Routines</h3>
         ${this._isAdult ? html`<button class="primary" @click=${() => { this._sheet = { type: 'routine-pick' }; }}><ha-icon icon="mdi:plus"></ha-icon>Add routine</button>` : nothing}
       </div>
-      ${list.length ? list.map(r => {
-        const run = this._run(r.id);
-        const done = run.steps.length;
-        const can = this._isAdult || !(r.assignees || []).length ? true : r.assignees.includes(this._acting);
-        const who = (r.assignees || []).map(id => this._person(id)).filter(Boolean);
-        return html`
-          <div class="card routine ${run.completed ? 'finished' : ''}">
-            <button class="rhead" @click=${() => { this._sheet = { type: 'run', id: r.id }; }} ?disabled=${!can}>
-              <span class="emoji big">${r.emoji}</span>
-              <span class="txt"><b>${r.name}</b>
-                <small>${r.steps.length} steps · +${r.points} ★ · ${who.length ? who.map(p => p.emoji + ' ' + p.name).join(', ') : 'Anyone'}</small></span>
-              <span class="pill ${run.completed ? 'okp' : ''}">${run.completed ? '✓ Done' : done ? `${done}/${r.steps.length}` : 'Start'}</span>
-            </button>
-            <div class="bar"><i style="width:${(done / r.steps.length) * 100}%"></i></div>
-            ${this._isAdult ? html`<button class="link" @click=${() => this._editRoutine(r)}><ha-icon icon="mdi:pencil-outline"></ha-icon>Edit routine</button>` : nothing}
-          </div>`; })
+      ${list.length ? list.map(r => this._routineCard(r))
         : html`<div class="empty"><span>☀️</span><p>${this._isAdult ? 'No routines yet. Start from a morning or evening routine.' : 'No routines for you yet.'}</p></div>`}`;
   }
 
   // -- Points --
+
+  /** Points a person can still spend: balance minus what they have already asked for */
+  _free(personId) {
+    const held = (this._state.redemptions || []).filter(r => r.person_id === personId && r.status === 'requested').reduce((n, r) => n + r.cost, 0);
+    return (this._state.balances[personId] || 0) - held;
+  }
+
+  async _redeem(reward) {
+    const res = await this._call('redeem', { reward_id: reward.id });
+    if (res?.status === 'approved') { this._say(`Enjoy! ${reward.emoji} ${reward.name}`); celebrate(this, this._celebrationOf(this._acting), { big: false }); }
+    else if (res?.status === 'requested') this._say('Asked! A grown-up will say yes.');
+  }
+
+  async _decide(red, yes) {
+    const res = await this._call(yes ? 'redemptions/approve' : 'redemptions/decline', { redemption_id: red.id });
+    if (res && yes) this._say(`${this._person(red.person_id)?.name || 'They'} spent ${red.cost} ★ on ${red.name}`);
+  }
+
+  async _addStandard(list) {
+    for (const t of list) await this._call('rewards/add', { name: t.name, emoji: t.emoji, cost: t.cost });
+  }
+
+  _editReward(r) { this._draft = { ...r }; this._sheet = { type: 'reward', id: r.id }; }
+  _newReward(t) { this._draft = { name: t?.name || '', emoji: t?.emoji || '🎁', cost: t?.cost || 20, active: true }; this._sheet = { type: 'reward' }; }
+
+  async _saveReward() {
+    const d = this._draft;
+    if (!d.name.trim()) { this._say('Give the reward a name'); return; }
+    const fields = { name: d.name.trim(), emoji: d.emoji, cost: Number(d.cost) || 0, active: !!d.active };
+    const id = this._sheet?.id;
+    const res = await this._call(id ? 'rewards/update' : 'rewards/add', id ? { reward_id: id, ...fields } : fields);
+    if (res) this._closeSheet();
+  }
+
+  async _deleteReward() {
+    if (!confirm(`Remove “${this._draft.name}”? Points already spent stay spent.`)) return;
+    const res = await this._call('rewards/delete', { reward_id: this._sheet.id });
+    if (res) this._closeSheet();
+  }
+
+  // pocket money rules, one child at a time
+  _startPocket(p) {
+    const cur = this._state.pocket?.[p.id] || {};
+    this._draft = { enabled: cur.enabled ?? true, period: cur.period || 'week', points: cur.points ?? 20, amount: moneyInput(cur.amount ?? 500), account: cur.account || 'bank' };
+    this._sheet = { type: 'pocket', person: p };
+  }
+
+  async _savePocket() {
+    const d = this._draft;
+    const amount = parseMoney(d.amount);
+    if (Number.isNaN(amount) || amount < 0) { this._say('Enter the amount like 5 or 5.50'); return; }
+    if (!(Number(d.points) >= 1)) { this._say('Enter how many points they need'); return; }
+    const res = await this._call('pocket/set', { person_id: this._sheet.person.id, enabled: !!d.enabled, period: d.period, points: Number(d.points), amount, account: d.account });
+    if (res) this._closeSheet();
+  }
+
+  _pocketText(cfg) {
+    const per = cfg.period === 'week' ? 'week' : 'month';
+    return `${cfg.points} ★ a ${per} earns ${money(this.hass, cfg.amount)} into ${cfg.account === 'cash' ? 'Cash' : 'Bank'}`;
+  }
+
+  _pocketBar(cfg) {
+    const pct = Math.min(100, cfg.points ? (cfg.earned / cfg.points) * 100 : 0);
+    const left = Math.max(0, cfg.points - cfg.earned);
+    return html`
+      <div class="bar"><i style="width:${pct}%"></i></div>
+      <small class="muted pocketnote">${cfg.starts_next ? `Starts next ${cfg.period}.` : left ? `${cfg.earned} of ${cfg.points} ★ this ${cfg.period}. ${left} more to earn ${money(this.hass, cfg.amount)}.`
+        : `${cfg.earned} ★ this ${cfg.period}: ${money(this.hass, cfg.amount)} pocket money is on its way!`}</small>`;
+  }
+
+  _rewardsSection() {
+    const s = this._state;
+    const rewards = (s.rewards || []).filter(r => r.active !== false);
+    const me = this._actor;
+    const free = me ? this._free(me.id) : 0;
+    const waiting = this._isAdult ? (s.redemptions || []).filter(r => r.status === 'requested') : [];
+    const mine = (s.redemptions || []).filter(r => r.person_id === this._acting).slice(-3).reverse();
+    return html`
+      <h3>Spend your points ${me ? html`<span class="count">${free} ★ to spend</span>` : nothing}</h3>
+
+      ${waiting.length ? html`<div class="card">${waiting.map(r => html`
+        <div class="item">
+          <span class="emoji">${r.emoji}</span>
+          <span class="txt"><b>${r.name}</b><small>${this._person(r.person_id)?.name || 'Someone'} · ${r.cost} ★</small></span>
+          <button class="mini ok" @click=${() => this._decide(r, true)}><ha-icon icon="mdi:check"></ha-icon>Yes</button>
+          <button class="mini" aria-label="Say no" @click=${() => this._decide(r, false)}><ha-icon icon="mdi:close"></ha-icon></button>
+        </div>`)}</div><p class="muted">Waiting for a yes before the points are spent.</p>` : nothing}
+
+      ${rewards.length ? html`<div class="rewards">${rewards.map(r => {
+        const can = !!me && free >= r.cost && me.role !== 'guest';
+        return html`
+          <div class="reward ${can ? '' : 'locked'}">
+            ${this._isAdult ? html`<button class="redit" aria-label="Edit ${r.name}" @click=${() => this._editReward(r)}><ha-icon icon="mdi:pencil-outline"></ha-icon></button>` : nothing}
+            <span class="re">${r.emoji}</span><b>${r.name}</b>
+            <span class="cost">${r.cost} ★</span>
+            <button class="mini ${can ? 'ok' : ''}" ?disabled=${!can} @click=${() => this._redeem(r)}>${can ? (this._isAdult ? 'Spend' : 'Ask') : `${r.cost - free} more`}</button>
+          </div>`; })}</div>`
+        : html`<div class="empty"><span>🎁</span><p>${this._isAdult ? 'Nothing to spend points on yet.' : 'No rewards yet. Ask a grown-up to add some!'}</p>
+          ${this._isAdult ? html`<button class="primary" @click=${() => this._addStandard(REWARD_TEMPLATES)}>Add the standard rewards</button>` : nothing}</div>`}
+
+      ${this._isAdult ? html`<div class="head"><span></span><button class="link" @click=${() => { this._sheet = { type: 'reward-pick' }; }}><ha-icon icon="mdi:plus"></ha-icon>Add a reward</button></div>` : nothing}
+
+      ${mine.length ? html`<h4>Your requests</h4><div class="card">${mine.map(r => html`
+        <div class="item small">
+          <span class="emoji">${r.emoji}</span>
+          <span class="txt"><b>${r.name}</b><small>${r.cost} ★ · ${{ requested: 'waiting for a yes', approved: 'enjoy!', declined: 'not this time' }[r.status]}</small></span>
+          ${r.status === 'requested' ? html`<button class="mini" @click=${() => this._call('redemptions/cancel', { redemption_id: r.id })}>Cancel</button>` : nothing}
+        </div>`)}</div>` : nothing}`;
+  }
+
+  _pocketSection() {
+    const s = this._state;
+    const pocket = s.pocket || {};
+    const kids = this._people.filter(p => p.role === 'child');
+    const financeOn = !!this.modules?.finance;
+    if (!this._isAdult) {
+      const mine = this._actor && pocket[this._acting];
+      if (!mine?.enabled) return nothing;
+      return html`<h3>Pocket money</h3><div class="card pad">${this._pocketBar(mine)}
+        <p class="muted">${this._pocketText(mine)}.</p></div>${this._pocketHistory(this._acting)}`;
+    }
+    return html`
+      <h3>Pocket money</h3>
+      <div class="card">${kids.length ? kids.map(p => {
+        const cfg = pocket[p.id];
+        return html`
+          <div class="pk">
+            <div class="item">
+              ${this._avatar(p, 'lg')}
+              <span class="txt"><b>${p.name}</b><small>${cfg?.enabled ? this._pocketText(cfg) : 'No pocket money set up'}</small></span>
+              <button class="mini ${cfg?.enabled ? '' : 'ok'}" @click=${() => this._startPocket(p)}>${cfg?.enabled ? 'Change' : 'Set up'}</button>
+            </div>
+            ${cfg?.enabled ? html`<div class="pkbar">${this._pocketBar(cfg)}</div>` : nothing}
+          </div>`; }) : html`<p class="muted pad">Add children under Manage people first.</p>`}</div>
+      <p class="muted">When a ${'week or month'} finishes, a child who earned enough points is paid into their ${financeOn ? 'Finance account' : 'account'} automatically.
+        Only chores and routines count (not bonuses), and an undone chore takes its points back.
+        ${financeOn ? '' : html`<b>The Finance part is switched off, so nothing is paid until you switch it on (under Settings → Menu).</b>`}</p>
+      ${this._pocketHistory(null)}`;
+  }
+
+  _pocketHistory(personId) {
+    const list = (this._state.pocket_history || []).filter(h => !personId || h.person_id === personId).slice(-5).reverse();
+    if (!list.length) return nothing;
+    return html`<h4>Past ${personId ? 'weeks' : 'weeks and months'}</h4><div class="card">${list.map(h => {
+      const p = this._person(h.person_id);
+      return html`<div class="item small">${this._avatar(p)}
+        <span class="txt"><b>${p?.name || 'Someone'}: ${h.earned} of ${h.target} ★</b><small>${this._dateLabel(h.start)} – ${this._dateLabel(this._dayBefore(h.end))}</small></span>
+        <span class="pill ${h.paid ? 'okp' : ''}">${h.paid ? `+${money(this.hass, h.amount)}` : 'Not this time'}</span></div>`; })}</div>`;
+  }
 
   _points() {
     const bal = this._state.balances;
@@ -547,6 +864,8 @@ class KshChoresModule extends LitElement {
           ${this._isAdult ? html`<button class="mini" aria-label="Adjust points for ${p.name}"
             @click=${() => { this._draft = { points: '', reason: '' }; this._sheet = { type: 'adjust', person: p }; }}><ha-icon icon="mdi:plus-minus-variant"></ha-icon></button>` : nothing}
         </div>`)}</div>
+      ${this._rewardsSection()}
+      ${this._pocketSection()}
       <h3>Recent</h3>
       ${this._state.history.length ? html`<div class="card">${this._state.history.map(e => {
         const p = this._person(e.person_id);
@@ -563,20 +882,29 @@ class KshChoresModule extends LitElement {
   _settings() {
     const a = this._actor;
     return html`
-      <h3>Who is using this device</h3>
-      <div class="card">
-        ${a ? this._personRow(a, () => this._canSwitch && (this._sheet = { type: 'switch' }),
-          this._canSwitch ? html`<span class="pill">Switch</span>` : nothing) : html`<div class="item"><span class="txt"><b>${this.hass.user?.name}</b><small>Administrator</small></span></div>`}
-      </div>
-      ${!this._canSwitch ? html`<p class="muted">You are signed in as yourself, so chores are always done as you.</p>` : html`
-        <p class="muted">On a shared tablet, switch to whoever is using it. Adults can protect their profile with a PIN.</p>`}
+      ${a ? html`
+        <h3>Your PIN</h3>
+        <div class="card">
+          <div class="item">
+            ${this._avatar(a, 'lg')}
+            <span class="txt"><b>${a.has_pin ? 'PIN is on' : 'No PIN yet'}</b>
+              <small>${a.has_pin ? `Needed to use ${a.name}'s profile on a shared login.` : `Set 4 digits so ${a.name} can sign in on any device.`}</small></span>
+            <button class="mini ok" @click=${() => this._startPin()}>${a.has_pin ? 'Change' : 'Set PIN'}</button>
+            ${a.has_pin ? html`<button class="mini" aria-label="Remove PIN" @click=${() => this._savePin(true)}><ha-icon icon="mdi:close"></ha-icon></button>` : nothing}
+          </div>
+        </div>
+        <p class="muted">On a child's own device: tap your name at the top, pick yourself and type your PIN, then tick off your chores and routines.
+          An adult can set or reset a child's PIN under <i>Manage people</i>.</p>` : html`
+        <p class="muted">${this._canSwitch ? 'Tap the name at the top to say who is using this device.' : 'You are signed in as yourself, so chores are always done as you.'}</p>`}
+
+      ${this._celebrationSection()}
 
       <h3>People</h3>
       <div class="card">
-        ${this._people.map(p => html`<div class="item small">${this._avatar(p)}<span class="txt"><b>${p.name}</b><small>${{ adult: 'Adult', child: 'Child', guest: 'Guest' }[p.role]}${p.user_id ? '' : ' · no Home Assistant login'}</small></span></div>`)}
+        ${this._people.map(p => html`<div class="item small">${this._avatar(p)}<span class="txt"><b>${p.name}</b><small>${{ adult: 'Adult', child: 'Child', guest: 'Guest' }[p.role]}${p.user_id ? '' : ' · no Home Assistant login'}${p.has_pin ? ' · PIN' : ''}</small></span></div>`)}
         ${this._isAdult ? html`<button class="item btn" @click=${() => this.dispatchEvent(new CustomEvent('hub-sheet', { detail: { sheet: 'people' }, bubbles: true, composed: true }))}>
           <span class="emoji"><ha-icon icon="mdi:account-multiple-plus-outline"></ha-icon></span>
-          <span class="txt"><b>Manage people & guests</b><small>Add children and guests without a login, set roles</small></span>
+          <span class="txt"><b>Manage people & guests</b><small>Add children and guests without a login, set roles and PINs</small></span>
           <ha-icon class="chev" icon="mdi:chevron-right"></ha-icon></button>` : nothing}
       </div>
 
@@ -584,8 +912,9 @@ class KshChoresModule extends LitElement {
       <div class="card info">
         <p><b>Children</b> mark a chore done and an adult approves it. Points are paid once, when it is approved.</p>
         <p><b>Adults</b> can do a chore themselves, and it counts straight away.</p>
+        <p><b>Late</b> means an earlier day that was not finished, or today after the due time. A chore is never late before its starting day.</p>
         <p><b>Reminders</b> go out at a chore's own due time. Set a phone to notify under <i>Manage people</i>, otherwise the reminder shows in Home Assistant's notifications.</p>
-        <p><b>Routines</b> are step by step and pay into the same points once the last step is done.</p>
+        <p><b>Routines</b> are step by step, each step on the days you choose, and pay into the same points once the last step of the day is done.</p>
       </div>`;
   }
 
@@ -599,6 +928,7 @@ class KshChoresModule extends LitElement {
         <div class="grabber"></div>
         ${t === 'switch' ? this._switchSheet() : nothing}
         ${t === 'pin' ? this._pinSheet() : nothing}
+        ${t === 'setpin' ? this._setPinSheet() : nothing}
         ${t === 'pick' ? this._pickSheet() : nothing}
         ${t === 'chore' ? this._choreSheet() : nothing}
         ${t === 'routine-pick' ? this._routinePick() : nothing}
@@ -606,6 +936,9 @@ class KshChoresModule extends LitElement {
         ${t === 'run' ? this._runSheet() : nothing}
         ${t === 'celebrate' ? this._celebrate() : nothing}
         ${t === 'adjust' ? this._adjustSheet() : nothing}
+        ${t === 'reward-pick' ? this._rewardPick() : nothing}
+        ${t === 'reward' ? this._rewardSheet() : nothing}
+        ${t === 'pocket' ? this._pocketSheet() : nothing}
       </section>`;
   }
 
@@ -621,12 +954,87 @@ class KshChoresModule extends LitElement {
 
   _pinSheet() {
     const p = this._sheet.person;
-    return html`${this._title(`${p.name}'s PIN`, () => { this._sheet = { type: 'switch' }; })}
+    return html`${this._title(`${p.name}'s PIN`, this._sheet.stay ? null : () => { this._sheet = { type: 'switch' }; })}
       <form class="form" @submit=${e => { e.preventDefault(); this._checkPin(); }}>
         <input class="pin" type="password" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="••••" autofocus
           .value=${this._pin} @input=${e => { this._pin = e.target.value.replace(/\D/g, ''); }}>
         <button class="primary" type="submit" ?disabled=${this._pin.length !== 4}>Continue</button>
       </form>`;
+  }
+
+  _setPinSheet() {
+    return html`${this._title(this._actor?.has_pin ? 'Change your PIN' : 'Set your PIN')}
+      <form class="form" @submit=${e => { e.preventDefault(); this._savePin(); }}>
+        <label>New PIN (4 digits)
+          <input class="pin" type="password" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="••••" autofocus
+            .value=${this._pin} @input=${e => { this._pin = e.target.value.replace(/\D/g, ''); }}></label>
+        <label>Type it again
+          <input class="pin" type="password" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="••••"
+            .value=${this._pin2} @input=${e => { this._pin2 = e.target.value.replace(/\D/g, ''); }}></label>
+        <button class="primary" type="submit" ?disabled=${this._pin.length !== 4 || this._pin2.length !== 4}>Save PIN</button>
+      </form>`;
+  }
+
+  _rewardPick() {
+    const have = new Set((this._state.rewards || []).map(r => r.name.toLowerCase()));
+    return html`${this._title('Add a reward')}
+      <button class="row" @click=${() => this._newReward(null)}>
+        <span class="ico">✏️</span><span class="txt"><b>Create your own</b><small>Name it, pick an emoji and the points it costs</small></span><ha-icon class="chev" icon="mdi:chevron-right"></ha-icon></button>
+      <h3>Standard rewards</h3>
+      ${REWARD_TEMPLATES.map(t => {
+        const added = have.has(t.name.toLowerCase());
+        return html`
+          <button class="row" ?disabled=${added} @click=${() => this._call('rewards/add', { name: t.name, emoji: t.emoji, cost: t.cost })}>
+            <span class="ico">${t.emoji}</span><span class="txt"><b>${t.name}</b><small>${t.cost} ★</small></span>
+            ${added ? html`<ha-icon class="chev" icon="mdi:check-circle"></ha-icon>` : html`<ha-icon class="chev" icon="mdi:plus-circle-outline"></ha-icon>`}
+          </button>`; })}
+      <p class="muted">Tap one to add it. You can change what it costs afterwards.</p>`;
+  }
+
+  _rewardSheet() {
+    const d = this._draft;
+    const editing = !!this._sheet.id;
+    return html`${this._title(editing ? 'Edit reward' : 'New reward', !editing ? () => { this._sheet = { type: 'reward-pick' }; } : null)}
+      <div class="form">
+        <label>Name<input .value=${d.name} maxlength="60" placeholder="e.g. Ice cream treat" @input=${e => this._set('name', e.target.value)}></label>
+        <label>Emoji</label>${this._emojiPicker(d.emoji, v => this._set('emoji', v))}
+        <label>Costs
+          <span class="stepper">
+            <button type="button" @click=${() => this._set('cost', Math.max(1, (Number(d.cost) || 0) - 5))}>−</button>
+            <input type="number" min="1" .value=${String(d.cost)} @input=${e => this._set('cost', e.target.value)}>
+            <button type="button" @click=${() => this._set('cost', (Number(d.cost) || 0) + 5)}>+</button>
+            <span class="muted">★ points</span>
+          </span></label>
+        ${this._switchRow('Available to ask for', d.active, v => this._set('active', v))}
+        <div class="actions">
+          ${editing ? html`<button class="danger" @click=${() => this._deleteReward()}>Remove</button>` : nothing}
+          <button class="primary grow" @click=${() => this._saveReward()}>Save reward</button>
+        </div>
+      </div>`;
+  }
+
+  _pocketSheet() {
+    const d = this._draft;
+    const p = this._sheet.person;
+    return html`${this._title(`Pocket money for ${p.name}`)}
+      <div class="form">
+        ${this._switchRow('Pay pocket money', d.enabled, v => this._set('enabled', v))}
+        <label>Paid every</label>
+        <div class="seg">${[['week', 'Week'], ['month', 'Month']].map(([v, l]) => html`<button type="button" class="${d.period === v ? 'on' : ''}" @click=${() => this._set('period', v)}>${l}</button>`)}</div>
+        <label>Points they need to earn each ${d.period}
+          <span class="stepper">
+            <button type="button" @click=${() => this._set('points', Math.max(1, (Number(d.points) || 0) - 5))}>−</button>
+            <input type="number" min="1" .value=${String(d.points)} @input=${e => this._set('points', e.target.value)}>
+            <button type="button" @click=${() => this._set('points', (Number(d.points) || 0) + 5)}>+</button>
+            <span class="muted">★</span>
+          </span></label>
+        <label>Pocket money amount<input inputmode="decimal" .value=${d.amount} placeholder="5.00" @input=${e => this._set('amount', e.target.value)}></label>
+        <label>Pay it into</label>
+        <div class="seg">${[['cash', '💵 Cash'], ['bank', '🏦 Bank']].map(([v, l]) => html`<button type="button" class="${d.account === v ? 'on' : ''}" @click=${() => this._set('account', v)}>${l}</button>`)}</div>
+        <small class="hint">It starts with the next full ${d.period}, so nothing is paid for the days already gone.
+          Chores and routines count; bonuses do not.${this.modules?.finance ? '' : ' The Finance part is off, so it is paid once you switch it on.'}</small>
+        <div class="actions"><button class="primary grow" @click=${() => this._savePocket()}>Save</button></div>
+      </div>`;
   }
 
   _pickSheet() {
@@ -683,8 +1091,13 @@ class KshChoresModule extends LitElement {
         ${this._chips(d.assignees, id => this._toggleAssignee(id), () => this._set('assignees', []))}
         <small class="hint">${d.assignees.length ? 'Only these people can do it.' : 'Anyone in the family can do it.'}</small>
 
+        <label>${rec.type === 'once' ? 'Date' : 'Starts on'}
+          <input type="date" .value=${d.start || todayIso()} @input=${e => this._set('start', e.target.value)}></label>
+        <small class="hint">${rec.type === 'once' ? 'It only happens on this day.'
+          : (d.start || todayIso()) > todayIso() ? 'It does not show up, or count as late, before this day.' : 'The first day it is due.'}</small>
+
         <label>Repeats</label>
-        <div class="seg">${[['daily', 'Daily'], ['weekly', 'Weekly'], ['custom', 'Custom']].map(([v, l]) => html`
+        <div class="seg">${[['daily', 'Daily'], ['weekly', 'Weekly'], ['custom', 'Custom'], ['once', 'Once']].map(([v, l]) => html`
           <button type="button" class="${rec.type === v ? 'on' : ''}" @click=${() => this._setRecType(v)}>${l}</button>`)}</div>
         ${rec.type === 'weekly' || (rec.type === 'custom' && rec.unit === 'week') ? html`
           <div class="chips">${DAY_NAMES.map((n, i) => html`<button type="button" class="chip ${(rec.days || []).includes(i) ? 'on' : ''}" @click=${() => this._toggleDay(i)}>${n}</button>`)}</div>` : nothing}
@@ -695,7 +1108,7 @@ class KshChoresModule extends LitElement {
               ${[['day', 'days'], ['week', 'weeks'], ['month', 'months']].map(([v, l]) => html`<option value=${v} ?selected=${rec.unit === v}>${l}</option>`)}
             </select>
           </div>
-          <small class="hint">Starting ${rec.start || 'today'}.</small>` : nothing}
+          <small class="hint">Counting from ${d.start || 'today'}.</small>` : nothing}
 
         <label>Due time <small class="hint inl">(optional)</small></label>
         <div class="time">
@@ -746,15 +1159,19 @@ class KshChoresModule extends LitElement {
         <label>Who does it</label>
         ${this._chips(d.assignees, id => this._set('assignees', d.assignees.includes(id) ? d.assignees.filter(x => x !== id) : [...d.assignees, id]), () => this._set('assignees', []))}
         <label>Steps</label>
+        <small class="hint">Each step can be for certain days, like packing the school bag on school days only.</small>
         ${d.steps.map((s, i) => html`
+          <div class="stepwrap">
           <div class="step">
             <input class="se" maxlength="8" .value=${s.emoji || ''} placeholder="🙂" @input=${e => this._setStep(i, { emoji: e.target.value })} aria-label="Step emoji">
             <input class="st" maxlength="60" .value=${s.text} placeholder="Step ${i + 1}" @input=${e => this._setStep(i, { text: e.target.value })}>
             <button type="button" class="mini" @click=${() => this._moveStep(i, -1)} aria-label="Move up"><ha-icon icon="mdi:arrow-up"></ha-icon></button>
             <button type="button" class="mini" @click=${() => this._moveStep(i, 1)} aria-label="Move down"><ha-icon icon="mdi:arrow-down"></ha-icon></button>
             <button type="button" class="mini" @click=${() => this._set('steps', d.steps.filter((_, n) => n !== i))} aria-label="Remove step"><ha-icon icon="mdi:close"></ha-icon></button>
+          </div>
+          ${this._stepDays(s, i)}
           </div>`)}
-        <button type="button" class="link" @click=${() => this._set('steps', [...d.steps, { text: '', emoji: '' }])}><ha-icon icon="mdi:plus"></ha-icon>Add a step</button>
+        <button type="button" class="link" @click=${() => this._set('steps', [...d.steps, { text: '', emoji: '', days: [] }])}><ha-icon icon="mdi:plus"></ha-icon>Add a step</button>
         <div class="actions">
           ${editing ? html`<button class="danger" @click=${() => this._deleteRoutine()}>Delete</button>` : nothing}
           <button class="primary grow" @click=${() => this._saveRoutine()}>Save routine</button>
@@ -762,24 +1179,53 @@ class KshChoresModule extends LitElement {
       </div>`;
   }
 
+  _daysLabel(days = []) {
+    if (!days.length) return 'Every day';
+    if (sameDays(days, WEEKDAYS)) return 'Weekdays';
+    if (sameDays(days, WEEKENDS)) return 'Weekends';
+    return days.map(x => DAY_NAMES[x]).join(', ');
+  }
+
+  _stepDays(s, i) {
+    const days = s.days || [];
+    const open = this._openStep === i;
+    const set = d => this._setStep(i, { days: d });
+    return html`
+      <div class="stepdays">
+        <button type="button" class="daybtn ${days.length ? 'some' : ''}" @click=${() => { this._openStep = open ? null : i; this.requestUpdate(); }}
+          aria-expanded=${open ? 'true' : 'false'}><ha-icon icon="mdi:calendar-week"></ha-icon>${this._daysLabel(days)}<ha-icon icon=${open ? 'mdi:chevron-up' : 'mdi:chevron-down'}></ha-icon></button>
+        ${open ? html`
+          <div class="chips">
+            <button type="button" class="chip ${!days.length ? 'on' : ''}" @click=${() => set([])}>Every day</button>
+            <button type="button" class="chip ${sameDays(days, WEEKDAYS) ? 'on' : ''}" @click=${() => set([...WEEKDAYS])}>Weekdays</button>
+            <button type="button" class="chip ${sameDays(days, WEEKENDS) ? 'on' : ''}" @click=${() => set([...WEEKENDS])}>Weekends</button>
+          </div>
+          <div class="chips">${DAY_NAMES.map((n, d) => html`
+            <button type="button" class="chip ${days.includes(d) ? 'on' : ''}"
+              @click=${() => set(days.includes(d) ? days.filter(x => x !== d) : [...days, d].sort())}>${n}</button>`)}</div>` : nothing}
+      </div>`;
+  }
+
   _runSheet() {
     const r = this._state.routines.find(x => x.id === this._sheet.id);
     if (!r) return nothing;
     const run = this._run(r.id);
-    const next = r.steps.find(s => !run.steps.includes(s.id));
+    const steps = this._stepsToday(r);
+    const next = steps.find(st => !run.steps.includes(st.id));
+    const done = steps.filter(st => run.steps.includes(st.id)).length;
     return html`${this._title(`${r.emoji} ${r.name}`)}
-      <div class="bar"><i style="width:${(run.steps.length / r.steps.length) * 100}%"></i></div>
+      <div class="bar"><i style="width:${steps.length ? (done / steps.length) * 100 : 0}%"></i></div>
       ${next ? html`
         <div class="focus">
           <div class="fe">${next.emoji || '👉'}</div>
           <div class="ft">${next.text}</div>
           <button class="primary huge" @click=${() => this._toggleStep(r, next.id, true)}><ha-icon icon="mdi:check"></ha-icon>Done</button>
         </div>` : html`<div class="focus"><div class="fe">🎉</div><div class="ft">All steps done!</div></div>`}
-      <h4>Steps</h4>
-      ${r.steps.map(s => html`
-        <button class="step-row ${run.steps.includes(s.id) ? 'done' : ''}" @click=${() => this._toggleStep(r, s.id, !run.steps.includes(s.id))}>
-          <ha-icon icon=${run.steps.includes(s.id) ? 'mdi:check-circle' : 'mdi:circle-outline'}></ha-icon>
-          <span>${s.emoji} ${s.text}</span>
+      <h4>Today's steps</h4>
+      ${steps.map(st => html`
+        <button class="step-row ${run.steps.includes(st.id) ? 'done' : ''}" @click=${() => this._toggleStep(r, st.id, !run.steps.includes(st.id))}>
+          <ha-icon icon=${run.steps.includes(st.id) ? 'mdi:check-circle' : 'mdi:circle-outline'}></ha-icon>
+          <span>${st.emoji} ${st.text}</span>
         </button>`)}`;
   }
 
@@ -931,6 +1377,27 @@ class KshChoresModule extends LitElement {
     .step { display: flex; gap: 6px; align-items: center; }
     .step .se { width: 52px !important; text-align: center; padding: 11px 4px !important; }
     .step .st { flex: 1; min-width: 0; }
+    .cels { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; padding: 12px; }
+    .cel { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 14px 8px; border-radius: 16px; text-align: center;
+      border: 2px solid var(--hub-border); background: var(--hub-surface-2); }
+    .cel.sel { border-color: var(--hub-accent); }
+    .cel .ce { font-size: 34px; line-height: 1.1; } .cel b { font-size: 14px; } .cel small { color: var(--hub-muted); font-size: 12px; line-height: 1.25; }
+    .pad { padding: 12px 16px; }
+    .rewards { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+    .reward { position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 14px 10px 12px; text-align: center;
+      background: var(--hub-surface); border: 1px solid var(--hub-border); border-radius: 18px; }
+    .reward .re { font-size: 34px; line-height: 1.1; } .reward b { font-size: 14px; line-height: 1.2; }
+    .reward .cost { color: #e2ac3f; font-weight: 800; }
+    .reward.locked { opacity: .8; }
+    .redit { position: absolute; top: 6px; right: 6px; width: 30px; height: 30px; border-radius: 50%; border: none; background: transparent; color: var(--hub-muted); --mdc-icon-size: 18px; display: flex; align-items: center; justify-content: center; }
+    .pk + .pk { border-top: 1px solid var(--hub-border); } .pk .item { border-bottom: none; } .pkbar { padding: 0 14px 12px; }
+    .pkbar .bar, .card.pad .bar { margin: 0 0 6px; } .pocketnote { display: block; margin: 0; }
+    .seg.tabs { margin: 10px 0 6px; } .seg.tabs button { padding: 10px 4px; }
+    .lateh { color: #e8685a; } .count.late { background: #e8685a; color: #2a0a07; }
+    .stepwrap { border: 1px solid var(--hub-border); border-radius: 16px; padding: 8px; display: grid; gap: 6px; background: var(--hub-surface-2); }
+    .stepdays { padding: 0 2px; }
+    .daybtn { display: inline-flex; align-items: center; gap: 6px; border: none; background: none; color: var(--hub-muted); font-weight: 700; font-size: 12.5px; padding: 4px 4px; --mdc-icon-size: 16px; }
+    .daybtn.some { color: var(--hub-accent); }
     .pin { text-align: center; font-size: 28px !important; letter-spacing: .4em; }
     .focus { text-align: center; padding: 18px 0 8px; }
     .fe { font-size: 72px; line-height: 1.1; }

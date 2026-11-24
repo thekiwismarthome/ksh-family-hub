@@ -6,10 +6,14 @@ DOMAIN = "ksh_family_hub"
 MODULE_RECIPES = "recipes"
 MODULE_SHOPPING = "shopping"
 MODULE_CHORES = "chores"
+MODULE_CALENDAR = "calendar"
+MODULE_FINANCE = "finance"
 MODULE_OPTIONS = {
     MODULE_RECIPES: "enable_recipes",
     MODULE_SHOPPING: "enable_shopping",
     MODULE_CHORES: "enable_chores",
+    MODULE_CALENDAR: "enable_calendar",
+    MODULE_FINANCE: "enable_finance",
 }
 
 DEFAULT_COUNTRY = "NZ"
