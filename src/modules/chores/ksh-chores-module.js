@@ -1345,14 +1345,14 @@ class KshChoresModule extends LitElement {
     .scroll { height: 100%; overflow-y: auto; }
     .page { max-width: 820px; margin: 0 auto; padding: 6px 16px 28px; }
     .center { height: 100%; display: flex; align-items: center; justify-content: center; padding: 24px; }
-    .spinner { width: 34px; height: 34px; border-radius: 50%; border: 3px solid var(--hub-border); border-top-color: #3db6cc; animation: spin .8s linear infinite; }
+    .spinner { width: 34px; height: 34px; border-radius: 50%; border: 3px solid var(--hub-border); border-top-color: var(--hub-accent); animation: spin .8s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
     .muted { color: var(--hub-muted); font-size: 13.5px; line-height: 1.45; margin: 6px 2px; }
     h2.big { margin: 20px 0 4px; }
     h3 { margin: 18px 4px 8px; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; color: var(--hub-muted); display: flex; align-items: center; gap: 8px; }
     h3.inline { margin: 0; }
     h4 { margin: 14px 4px 6px; font-size: 13px; color: var(--hub-muted); }
-    .count { background: #3db6cc; color: #06222a; border-radius: 999px; padding: 1px 8px; font-size: 11px; }
+    .count { background: var(--hub-accent); color: var(--hub-accent-ink); border-radius: 999px; padding: 1px 8px; font-size: 11px; }
     .date { margin: 6px 4px 2px; color: var(--hub-muted); font-size: 14px; }
 
     .who { display: flex; align-items: center; gap: 10px; margin: 6px 0 4px; }
@@ -1391,10 +1391,10 @@ class KshChoresModule extends LitElement {
     .score.neg { color: #e8685a; }
     .score.big { font-size: 32px; margin: 4px 0 12px; }
     .check { width: 44px; height: 44px; border-radius: 50%; flex: none; border: 2px solid var(--hub-muted); background: transparent; color: var(--hub-muted); display: flex; align-items: center; justify-content: center; --mdc-icon-size: 24px; }
-    .check:hover:not([disabled]) { background: #3db6cc; border-color: #3db6cc; color: #06222a; }
+    .check:hover:not([disabled]) { background: var(--hub-accent-2); border-color: var(--hub-accent-2); color: var(--hub-accent-2-ink); }
     .pill { border: 1px solid var(--hub-border); background: var(--hub-surface-2); color: var(--hub-muted); border-radius: 999px; padding: 6px 12px; font-size: 12.5px; font-weight: 800; white-space: nowrap; }
     .pill.wait { color: #f59a4d; border-color: rgba(245,154,77,.5); }
-    .pill.okp { color: #4fd1a1; border-color: rgba(79,209,161,.5); }
+    .pill.okp { color: var(--hub-accent-2); border-color: color-mix(in srgb, var(--hub-accent-2) 55%, transparent); }
     .mini { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--hub-border); background: var(--hub-surface-2); border-radius: 999px; padding: 7px 12px; font-weight: 700; font-size: 13px; --mdc-icon-size: 18px; flex: none; }
     .mini.ok { background: var(--hub-accent); color: var(--hub-accent-ink); border-color: transparent; }
     .chev { color: var(--hub-muted); --mdc-icon-size: 22px; flex: none; }
@@ -1409,7 +1409,7 @@ class KshChoresModule extends LitElement {
     .routine { margin-bottom: 12px; }
     .rhead { width: 100%; display: flex; align-items: center; gap: 12px; padding: 14px; background: none; border: none; text-align: left; }
     .bar { height: 6px; background: var(--hub-surface-2); border-radius: 3px; margin: 0 14px 10px; overflow: hidden; }
-    .bar i { display: block; height: 100%; background: #3db6cc; transition: width .25s; }
+    .bar i { display: block; height: 100%; background: var(--hub-accent-2); transition: width .25s; }
     .routine.finished .bar i { background: #4fd1a1; }
     .routine .link { margin: 0 10px 8px; }
 

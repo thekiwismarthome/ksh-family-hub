@@ -637,12 +637,9 @@ class ShoppingListStorage:
         data = {product_id: product.to_dict() for product_id, product in self._products.items()}
         await self._store_products.async_save(data)
 
-    async def _migrate_legacy_images_and_urls(self) -> None:
-        """Move old image files and rewrite stored URLs to the new path."""
+    def _move_legacy_image_files(self) -> int:
+        """Move image files from the old folder to the new one (blocking: call from the executor)."""
         moved_files = 0
-        updated_product_urls = 0
-        updated_item_urls = 0
-
         if self._legacy_images_dir.exists() and self._legacy_images_dir != self._images_dir:
             for src in self._legacy_images_dir.glob("*"):
                 if not src.is_file():
@@ -655,6 +652,15 @@ class ShoppingListStorage:
                     moved_files += 1
                 except Exception as err:
                     _LOGGER.debug("Could not move legacy image %s: %s", src, err)
+        return moved_files
+
+    async def _migrate_legacy_images_and_urls(self) -> None:
+        """Move old image files and rewrite stored URLs to the new path."""
+        updated_product_urls = 0
+        updated_item_urls = 0
+
+        # File work runs in the executor: touching the disk inside the event loop blocks Home Assistant
+        moved_files = await self.hass.async_add_executor_job(self._move_legacy_image_files)
 
         for product in self._products.values():
             image_url = product.image_url or ""

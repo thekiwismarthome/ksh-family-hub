@@ -777,7 +777,7 @@ class KshCalendarModule extends LitElement {
   }
 
   static styles = [avatarCss, css`
-    :host { display: block; position: relative; overflow: hidden; color: var(--hub-text); --cal: #8f7cf0; }
+    :host { display: block; position: relative; overflow: hidden; color: var(--hub-text); --cal: var(--hub-accent); }
     * { box-sizing: border-box; }
     button, input, select { font: inherit; color: inherit; }
     button { cursor: pointer; }
@@ -824,7 +824,7 @@ class KshCalendarModule extends LitElement {
     .emo .cn { font-size: 10px; font-weight: 800; color: var(--hub-muted); border: none; }
     .dots { display: flex; gap: 3px; flex-wrap: wrap; justify-content: center; min-height: 7px; }
     .dots i { width: 7px; height: 7px; border-radius: 50%; display: block; }
-    .dots i.ch { background: transparent; border: 1.5px solid #3db6cc; }
+    .dots i.ch { background: transparent; border: 1.5px solid var(--hub-accent-2); }
     .mini.chore { background: transparent; border-left-style: dashed; color: var(--hub-muted); }
     .chipcol { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
     .mini { display: block; background: color-mix(in srgb, var(--c) 24%, transparent); border-left: 3px solid var(--c); border-radius: 5px; padding: 1px 5px; font-size: 11.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -856,9 +856,9 @@ class KshCalendarModule extends LitElement {
     .ev.chore { background: transparent; border-style: dashed; }
     .tickrow { display: flex; align-items: center; gap: 8px; } .tickrow .ev { flex: 1; min-width: 0; }
     .check { width: 42px; height: 42px; border-radius: 50%; flex: none; border: 2px solid var(--hub-muted); background: transparent; color: var(--hub-muted); display: flex; align-items: center; justify-content: center; --mdc-icon-size: 22px; }
-    .check:hover:not([disabled]) { background: #3db6cc; border-color: #3db6cc; color: #06222a; }
+    .check:hover:not([disabled]) { background: var(--hub-accent-2); border-color: var(--hub-accent-2); color: var(--hub-accent-2-ink); }
     .check.done { background: #4fd1a1; border-color: #4fd1a1; color: #06222a; }
-    .count { background: #3db6cc; color: #06222a; border-radius: 999px; padding: 1px 8px; font-size: 11px; text-transform: none; letter-spacing: 0; margin-left: 6px; }
+    .count { background: var(--hub-accent); color: var(--hub-accent-ink); border-radius: 999px; padding: 1px 8px; font-size: 11px; text-transform: none; letter-spacing: 0; margin-left: 6px; }
     .switchrow.col { flex-direction: column; align-items: stretch; gap: 6px; }
     .switchrow.col .chips { margin: 2px 0 0; }
 

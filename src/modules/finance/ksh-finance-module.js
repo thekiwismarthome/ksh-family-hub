@@ -433,7 +433,7 @@ class KshFinanceModule extends LitElement {
   }
 
   static styles = [avatarCss, css`
-    :host { display: block; position: relative; overflow: hidden; color: var(--hub-text); --fin: #4a86f0; }
+    :host { display: block; position: relative; overflow: hidden; color: var(--hub-text); --fin: var(--hub-accent); }
     * { box-sizing: border-box; }
     button, input, select { font: inherit; color: inherit; }
     button { cursor: pointer; }

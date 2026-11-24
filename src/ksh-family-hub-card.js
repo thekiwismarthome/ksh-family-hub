@@ -4,7 +4,7 @@ import { CARD_VERSION } from 'virtual:card-version';
 import { enableSwipeClose } from './hub/swipe.js';
 import { SUB_TABS, visibleItems, orderItems, itemById, BAR_SLOTS } from './hub/modules.js';
 import { resolveActing, ACTING_EVENT } from './hub/actor.js';
-import { hubTokens } from './hub/hub-styles.js';
+import { hubTokens, themeId } from './hub/hub-styles.js';
 import './hub/ksh-hub-home.js';
 import './hub/ksh-hub-settings.js';
 import './hub/ksh-hub-placeholder.js';
@@ -68,7 +68,7 @@ export class KshFamilyHubCard extends LitElement {
     this._rail = false;
     this._moreOpen = false;
     this._theme = store.get(THEME_KEY) || 'dark';
-    this._palette = store.get(PALETTE_KEY) || 'midnight';
+    this._palette = themeId(store.get(PALETTE_KEY));
     this._households = [];
     this._householdId = null;
     this._sheet = null;

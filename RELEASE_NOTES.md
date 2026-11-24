@@ -2,6 +2,12 @@
 
 Versions now follow the date: **YEAR.MONTH.RELEASE**, with a `-betaN` suffix while in beta (the first one is 2026.11.1-beta6, after 0.1.0-beta.5).
 
+## 2026.11.1-beta8
+
+- **Ten colour themes, each with a light and a dark version**, taken from the mobile app palettes on paletadecolores.org: Graphite, Fintech blue and green (the new default), Indigo calendar, Fresh food green, Health and wellness, Delivery orange, Coral dating, Social pink and purple, Roasted café and Lavender meditation. Choose one in Settings → Theme; Dark / Light / Match Home Assistant still decides which version you see. The dark versions use a calm, near-neutral background so the colour stays on the buttons, tabs and highlights. The themes colour every part of the hub, including Shopping and Meals. If you had picked Midnight, Slate, Forest or Dusk before, you get the nearest new theme.
+- Chores, Calendar and Finance now take their accent colours from the theme instead of fixed teal, purple and blue.
+- Fixed a warning in the Home Assistant log: moving the old Shopping List Manager images at start-up read the disk on Home Assistant's main thread. It now runs in the background.
+
 ## 2026.11.1-beta7
 
 - **Preferred name and pictures for people.** Each person can have a preferred name (shown everywhere, never taken from the Home Assistant login) and a picture: an emoji, the Home Assistant picture of their linked login, or a photo of their own (shrunk to a small square on the device). The picture shows in the Chores and Calendar filters, on every chore, on calendar events, in Finance and in the people lists.

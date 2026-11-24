@@ -166,7 +166,7 @@ class KshHubSettings extends LitElement {
               <span>${p.label}</span>
             </button>`)}
         </section>
-        <p class="note">More themes will be added here later.</p>
+        <p class="note">Each theme has a light and a dark version. Dark or Light above (or Match Home Assistant) decides which one you see.</p>
 
         <h3>About</h3>
         <section class="card about">
