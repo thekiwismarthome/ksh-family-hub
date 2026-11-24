@@ -14,6 +14,9 @@ class SLMListHeader extends LitElement {
     compact: { type: Boolean, reflect: true },
     // 'classic' | 'fresh' | 'compact' (see Appearance settings)
     uiStyle: { type: String, attribute: 'ui-style', reflect: true },
+    // Inside the hub: the title is just a title (the Lists tab is the way there), the search bar is always there, and the
+    // summary card shows the totals
+    hub: { type: Boolean },
     // Estimated total of the list, shown in the "compact" style subtitle
     totalAmount: { type: Number },
     currencySymbol: { type: String },
@@ -110,14 +113,19 @@ class SLMListHeader extends LitElement {
   _renderFresh() {
     return html`
       <div class="header">
-        <button class="switcher" @click=${this.handleBack} aria-label=${t('Lists')}>
-          <span class="chip-ico"><ha-icon icon="mdi:cart-outline"></ha-icon></span>
-          <span class="switch-title">${this.activeList?.name || t('Shopping List')}</span>
-          <ha-icon class="muted" icon="mdi:chevron-down"></ha-icon>
-        </button>
-        <button class="round" aria-label=${t('Search products…')} @click=${() => this._emit('search-toggle')}>
-          <ha-icon icon="mdi:magnify"></ha-icon>
-        </button>
+        ${this.hub ? html`
+          <div class="switcher static">
+            <span class="chip-ico"><ha-icon icon="mdi:cart-outline"></ha-icon></span>
+            <span class="switch-title">${this.activeList?.name || t('Shopping List')}</span>
+          </div>` : html`
+          <button class="switcher" @click=${this.handleBack} aria-label=${t('Lists')}>
+            <span class="chip-ico"><ha-icon icon="mdi:cart-outline"></ha-icon></span>
+            <span class="switch-title">${this.activeList?.name || t('Shopping List')}</span>
+            <ha-icon class="muted" icon="mdi:chevron-down"></ha-icon>
+          </button>
+          <button class="round" aria-label=${t('Search products…')} @click=${() => this._emit('search-toggle')}>
+            <ha-icon icon="mdi:magnify"></ha-icon>
+          </button>`}
         <button class="round" aria-label=${t('List options')} @click=${() => this._emit('open-options')}>
           <ha-icon icon="mdi:tune-variant"></ha-icon>
         </button>
@@ -138,13 +146,17 @@ class SLMListHeader extends LitElement {
     const sw = (on) => html`<span class="sw ${on ? 'on' : ''}" aria-hidden="true"></span>`;
     return html`
       <div class="header">
-        <button class="title-btn" @click=${this.handleBack} aria-label=${t('Lists')}>
-          <span class="title-line">${this.activeList?.name || t('Shopping List')}<ha-icon class="muted" icon="mdi:chevron-down"></ha-icon></span>
-          <span class="subtitle">${this.itemCount} ${t('left')} · ${this.currencySymbol}${Number(this.totalAmount || 0).toFixed(2)}</span>
-        </button>
-        <button class="round" aria-label=${t('Search products…')} @click=${() => this._emit('search-toggle')}>
-          <ha-icon icon="mdi:magnify"></ha-icon>
-        </button>
+        ${this.hub ? html`
+          <div class="title-btn static">
+            <span class="title-line">${this.activeList?.name || t('Shopping List')}</span>
+          </div>` : html`
+          <button class="title-btn" @click=${this.handleBack} aria-label=${t('Lists')}>
+            <span class="title-line">${this.activeList?.name || t('Shopping List')}<ha-icon class="muted" icon="mdi:chevron-down"></ha-icon></span>
+            <span class="subtitle">${this.itemCount} ${t('left')} · ${this.currencySymbol}${Number(this.totalAmount || 0).toFixed(2)}</span>
+          </button>
+          <button class="round" aria-label=${t('Search products…')} @click=${() => this._emit('search-toggle')}>
+            <ha-icon icon="mdi:magnify"></ha-icon>
+          </button>`}
         <div class="menu-wrap">
           <button class="round" aria-label=${t('List options')} aria-expanded=${this._menuOpen ? 'true' : 'false'} @click=${this.handleMenuToggle}>
             <ha-icon icon="mdi:dots-horizontal"></ha-icon>
@@ -521,6 +533,8 @@ class SLMListHeader extends LitElement {
       text-align: left;
       cursor: pointer;
     }
+    .title-btn.static { cursor: default; }
+    .switcher.static { cursor: default; }
     .title-line {
       display: flex;
       align-items: center;

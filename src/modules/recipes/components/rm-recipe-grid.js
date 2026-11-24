@@ -17,6 +17,10 @@ class RmRecipeGrid extends LitElement {
     searchQuery:    { type: String },
     activeTag:      { type: String },
     columns:        { type: Number },
+    // 'list' | 'tiles' (Compact style shows rows by default; Fresh and Classic always show tiles)
+    viewMode:       { type: String },
+    // inside the Family Hub: the Tonight card is shown, in the theme colour
+    hubMode:        { type: Boolean },
     showFavourites: { type: Boolean },
     hideSidebar:    { type: Boolean },
     scrollPos:      { type: Number },
@@ -323,10 +327,11 @@ class RmRecipeGrid extends LitElement {
 
   // One titled section: a card grid (Fresh / Classic) or collapsible rows (Compact).
   _renderSection(key, label, list, gridStyle) {
-    if (this.uiStyle === 'compact' && !label) {
+    const rows = this.uiStyle === 'compact' && this.viewMode !== 'tiles';
+    if (rows && !label) {
       return html`<div class="recipe-rows">${list.map(r => this._renderRecipeRow(r))}</div>`;
     }
-    if (this.uiStyle === 'compact') {
+    if (rows) {
       const open = !this._collapsed[key];
       return html`
         <button class="sec-head" aria-expanded="${open ? 'true' : 'false'}"
@@ -450,9 +455,12 @@ class RmRecipeGrid extends LitElement {
     const showFavSection = this._filterMode === 'all' && this.showFavourites && !this.activeTag && !this.searchQuery && !this._starFilter && !this._sortByRating && this._sort === 'default';
     const favourites = showFavSection ? list.filter(r => r.is_favourite) : [];
     const mainList = showFavSection && favourites.length ? list.filter(r => !r.is_favourite) : list;
-    const gridStyle = `grid-template-columns: var(--rm-grid-columns, repeat(${this.columns}, minmax(0, 1fr)));`;
+    // in the hub the tiles fill the width (two on a phone, more on a tablet); elsewhere the Recipe columns setting rules
+    const gridStyle = this.hubMode
+      ? 'grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));'
+      : `grid-template-columns: var(--rm-grid-columns, repeat(${this.columns}, minmax(0, 1fr)));`;
     const hasActiveFilter = this._starFilter > 0 || this._sortByRating || this._sort !== 'default';
-    const showHero = this.uiStyle === 'fresh' && this.showPlanner && this._filterMode === 'all' && !this.activeTag && !this.searchQuery && !hasActiveFilter;
+    const showHero = (this.uiStyle === 'fresh' || this.hubMode) && this.showPlanner && this._filterMode === 'all' && !this.activeTag && !this.searchQuery && !hasActiveFilter;
 
     return html`
       <div class="grid-container" @click=${() => { if (this._showRatingMenu) this._showRatingMenu = false; }}>

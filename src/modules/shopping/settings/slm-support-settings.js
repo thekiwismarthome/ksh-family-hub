@@ -7,14 +7,10 @@ class SupportSettings extends LitElement {
   static properties = {
     // 'classic' | 'fresh' | 'compact' (set by the settings view)
     uiStyle: { type: String, attribute: 'ui-style', reflect: true },
-    slmVersion:  { type: String },
-    slmcVersion: { type: String },
   };
 
   constructor() {
     super();
-    this.slmVersion  = '…';
-    this.slmcVersion = '…';
   }
 
   render() {
@@ -72,26 +68,6 @@ class SupportSettings extends LitElement {
             </div>
             <ha-icon icon="mdi:open-in-new"></ha-icon>
           </a>
-
-          <div class="support-item">
-            <div class="item-icon">
-              <ha-icon icon="mdi:information"></ha-icon>
-            </div>
-            <div class="item-content">
-              <div class="item-title">Shopping List Manager</div>
-              <div class="item-subtitle">Integration version ${this.slmVersion}</div>
-            </div>
-          </div>
-
-          <div class="support-item">
-            <div class="item-icon">
-              <ha-icon icon="mdi:information"></ha-icon>
-            </div>
-            <div class="item-content">
-              <div class="item-title">SLM Card</div>
-              <div class="item-subtitle">Card version ${this.slmcVersion}</div>
-            </div>
-          </div>
         </div>
       </div>
     `;

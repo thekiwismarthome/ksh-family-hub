@@ -453,6 +453,12 @@ class KshChoresModule extends LitElement {
     catch { this._say(text.replace('\n', ' / ')); }
   }
 
+  async _copyKidsLink(person) {
+    const url = `${window.location.origin}/ksh-family-hub?kids=${encodeURIComponent(person.name)}`;
+    try { await navigator.clipboard.writeText(url); this._say(`Copied the link for ${person.name}'s screen.`); }
+    catch { this._say(url); }
+  }
+
   /** The kids' screen: a separate card for a bedside display, one per child */
   _kidsSection() {
     if (!this._isAdult) return nothing;
@@ -461,14 +467,16 @@ class KshChoresModule extends LitElement {
       <h3>Kids screen</h3>
       <div class="card">
         ${kids.length ? kids.map(p => html`
-          <button class="item btn" @click=${() => this._copyKids(p)}>
+          <div class="item">
             ${avatar(this.hass, p, 38)}
-            <span class="txt"><b>${p.name}</b><small>Copy the card for ${p.name}'s screen</small></span>
-            <ha-icon class="chev" icon="mdi:content-copy"></ha-icon>
-          </button>`) : html`<div class="item small"><span class="txt"><small>Add a child under People &amp; guests first.</small></span></div>`}
+            <span class="txt"><b>${p.name}</b><small>For ${p.name}'s bedside screen</small></span>
+            <button class="mini" @click=${() => this._copyKidsLink(p)}><ha-icon icon="mdi:link-variant"></ha-icon>Link</button>
+            <button class="mini" @click=${() => this._copyKids(p)}><ha-icon icon="mdi:content-copy"></ha-icon>Card</button>
+          </div>`) : html`<div class="item small"><span class="txt"><small>Add a child under People &amp; guests first.</small></span></div>`}
       </div>
       <p class="muted">A big, colourful chores, routines and points screen for one child, made for a bedside display (Kiosk Satellite, Fully Kiosk or a wall tablet).
-        In the dashboard, add a <b>Manual</b> card and paste what you copied, or choose <b>KSH Family Hub: Kids view</b> and set the person.
+        <b>Link</b> copies a web address that opens the screen full size: point the tablet's browser or Kiosk app at it, no dashboard needed.
+        <b>Card</b> copies a dashboard card: add a <b>Manual</b> card and paste it.
         Add <code>style: galaxy</code> (or <code>candy</code>, <code>ocean</code>, <code>jungle</code>) to change the look.</p>`;
   }
 

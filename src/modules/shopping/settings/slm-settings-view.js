@@ -1,7 +1,6 @@
 import { LitElement, html, css } from 'lit';
 import { fontInherit } from '../styles/ui-styles.js';
 import { t, I18nController } from '../services/translator.js';
-import { CARD_VERSION } from 'virtual:card-version';
 import { settingsGroupStyles } from '../styles/ui-styles.js';
 import './slm-profile-settings.js';
 import './slm-appearance-settings.js';
@@ -27,8 +26,6 @@ class SLMSettingsView extends LitElement {
     uiStyle: { type: String, attribute: 'ui-style', reflect: true },
     currentSection: { type: String },
     _query: { type: String, state: true },
-    // Installed integration version, from the integration itself (get_integration_settings)
-    integrationVersion: { type: String },
   };
 
   constructor() {
@@ -36,15 +33,6 @@ class SLMSettingsView extends LitElement {
     this.uiStyle = 'classic';
     this.currentSection = 'main';
     this._query = '';
-  }
-
-  // Integration: reported by the running integration. Card: the version built into this file.
-  get _slmVersion() {
-    return this.integrationVersion || '—';
-  }
-
-  get _slmcVersion() {
-    return CARD_VERSION;
   }
 
   get _classic() {
@@ -116,14 +104,6 @@ class SLMSettingsView extends LitElement {
           nav('support', '❓', 'mdi:help-circle-outline', '--slm-cat-household', t('FAQ & Support')),
           nav('backup', '💾', 'mdi:backup-restore', '--slm-cat-pantry', t('Backup & Restore'), t('Export or restore your lists and products')),
           { type: 'action', emoji: '🔄', icon: 'mdi:refresh', color: '--slm-cat-other', title: t('Refresh'), action: () => window.location.reload() },
-        ]
-      },
-      {
-        id: 'about',
-        title: t('App'),
-        rows: [
-          { type: 'info', title: t('Shopping List Manager'), sub: `Integration version ${this._slmVersion}` },
-          { type: 'info', title: t('SLM Card'), sub: `Card version ${this._slmcVersion}` },
         ]
       },
     );
@@ -273,8 +253,6 @@ class SLMSettingsView extends LitElement {
         return html`
           <ksh-slm-support-settings
             .uiStyle=${this.uiStyle}
-            .slmVersion=${this._slmVersion}
-            .slmcVersion=${this._slmcVersion}
             @back=${() => this.currentSection = 'main'}
           ></ksh-slm-support-settings>
         `;

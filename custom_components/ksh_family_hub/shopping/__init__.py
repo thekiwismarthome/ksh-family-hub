@@ -30,7 +30,8 @@ async def async_setup_module(hass: HomeAssistant, version: str, country: str) ->
 
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][DATA_STORAGE] = storage
-    hass.data[DOMAIN]["image_handler"] = ImageHandler(hass, hass.config.path())
+    # ImageHandler creates folders and moves old image files, so build it off the event loop
+    hass.data[DOMAIN]["image_handler"] = await hass.async_add_executor_job(ImageHandler, hass, hass.config.path())
     hass.data[DOMAIN]["country"] = country
     hass.data[DOMAIN]["version"] = version
 

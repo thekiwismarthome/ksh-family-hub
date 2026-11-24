@@ -62,6 +62,8 @@ const DEFAULT_SETTINGS = {
   darkMode: 'system',
   fontSize: 'medium',
   columns: 3,
+  // 'list' or 'tiles' for the recipes in the Family Hub (Compact style)
+  recipeView: 'list',
   showFavourites: true,
   showPlanner: true,
   recentCount: 12,
@@ -729,6 +731,11 @@ class RecipeManagerCard extends LitElement {
 
   // -- Settings -------------------------------------------------------------
 
+  _toggleRecipeView() {
+    this._settings = { ...this._settings, recipeView: this._settings.recipeView === 'tiles' ? 'list' : 'tiles' };
+    saveSettings(this._settings);
+  }
+
   _handleSettingsChange(e) {
     const prevLanguage = this._settings.language;
     this._settings = e.detail.settings;
@@ -1279,6 +1286,13 @@ class RecipeManagerCard extends LitElement {
 
           ${inDetail ? this._renderStars(this._selectedRecipe.rating) : ''}
 
+          ${this._view === 'grid' && this._ui === 'compact' ? html`
+            <button class="icon-btn" @click=${this._toggleRecipeView}
+              title="${this._settings.recipeView === 'tiles' ? msg('Show as a list') : msg('Show as tiles')}"
+              aria-label="${this._settings.recipeView === 'tiles' ? msg('Show as a list') : msg('Show as tiles')}">
+              <ha-icon icon="${this._settings.recipeView === 'tiles' ? 'mdi:view-agenda-outline' : 'mdi:view-grid-outline'}"></ha-icon>
+            </button>` : ''}
+
           <button class="icon-btn wake-toggle-btn ${this._globalWakeActive ? 'active' : ''}"
             @click=${this._toggleGlobalWakeLock}
             ?disabled=${!isWakeLockSupported()}
@@ -1382,6 +1396,8 @@ class RecipeManagerCard extends LitElement {
             .searchQuery=${this._searchQuery}
             .activeTag=${this._activeTag}
             .columns=${s.columns}
+            .viewMode=${s.recipeView}
+            .hubMode=${this.hubMode}
             .showFavourites=${s.showFavourites}
             .hideSidebar=${this._wide}
             .scrollPos=${this._gridScrollPos}

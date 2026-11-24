@@ -741,6 +741,20 @@ export class KshFamilyHubCard extends LitElement {
 // One class per custom element: the dashboard card and the sidebar panel share all behaviour.
 class KshFamilyHubPanel extends KshFamilyHubCard {
   connectedCallback() { this.setAttribute('panel', ''); super.connectedCallback(); }
+
+  // /ksh-family-hub?kids=Mia opens the kids' screen for that child instead of the hub, full screen, with no dashboard card needed
+  render() {
+    const params = new URLSearchParams(window.location.search);
+    const kid = params.get('kids');
+    if (!kid) return super.render();
+    if (!this._kidsEl || this._kidsFor !== kid) {
+      this._kidsFor = kid;
+      this._kidsEl = document.createElement('ksh-family-hub-kids-card');
+      this._kidsEl.setConfig({ person: kid, style: params.get('style') || undefined, height: '100dvh' });
+    }
+    this._kidsEl.hass = this.hass;
+    return html`${this._kidsEl}`;
+  }
 }
 
 if (!customElements.get('ksh-family-hub-card')) customElements.define('ksh-family-hub-card', KshFamilyHubCard);

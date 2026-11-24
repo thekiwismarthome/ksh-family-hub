@@ -1138,7 +1138,7 @@ class ShoppingListManagerCard extends LitElement {
         <i style="width: ${pct}%"></i>
       </div>
     `;
-    if (ui === 'compact') return bar;
+    if (ui === 'compact' && !this.hubMode) return bar;
     return html`
       <div class="hero">
         <div class="hero-row">
@@ -1246,6 +1246,7 @@ class ShoppingListManagerCard extends LitElement {
             .currencySymbol=${this._currencySymbol}
             .totalAmount=${this.total.total}
             .uiStyle=${ui}
+            .hub=${this.hubMode}
             ?compact=${this._classicEmbedded}
             @back=${this.handleBackToLists}
             @share=${this.handleShareList}
@@ -1313,13 +1314,14 @@ class ShoppingListManagerCard extends LitElement {
             `}
           </div>
 
+          ${this.hubMode ? '' : html`
           <div class="total-bar">
             <div class="total-label">${t('Estimated total')}</div>
             <div class="total-amount">
               ${this._currencySymbol}${this.total.total.toFixed(2)}
             </div>
             <div class="total-count">${this.total.item_count} ${t('items')}</div>
-          </div>
+          </div>`}
         `;
       }
 
@@ -1362,7 +1364,6 @@ class ShoppingListManagerCard extends LitElement {
               .isEmbedded=${this.isEmbedded || this.hubMode}
               .categories=${this.categories}
               .uiStyle=${this._ui}
-              .integrationVersion=${this._integrationSettings?.version}
               @settings-changed=${this.handleSettingsChange}
               @lists-updated=${async () => { await this.loadData(); await this._loadIntegrationSettings(); }}
               @region-changed=${() => this._loadIntegrationSettings()}
@@ -1475,6 +1476,13 @@ class ShoppingListManagerCard extends LitElement {
     /* Embedded in a host card that already has its own bottom navigation */
     /* KSH Family Hub supplies the navigation, so no bottom-nav clearance is needed */
     :host([data-hub]) { height: 100%; max-height: none; }
+    /* the summary card (Left to buy / Estimated) in the theme colour */
+    :host([data-hub]) .hero {
+      display: grid; gap: 12px; margin: 12px 16px 0; padding: 18px 20px; border-radius: 24px;
+      background: var(--hub-accent); color: var(--hub-accent-ink);
+    }
+    :host([data-hub]) .hero .progress { display: block; background: color-mix(in srgb, var(--hub-accent-ink) 28%, transparent); }
+    :host([data-hub]) .hero .progress i { background: var(--hub-accent-ink); }
     :host([data-hub][data-ui="fresh"]) .fab { bottom: 16px; }
     :host([data-hub][data-ui="fresh"]) .content-area { padding-bottom: 96px; }
     :host([data-hub][data-ui="compact"]) .content-area { padding-bottom: 8px; }
@@ -1482,14 +1490,14 @@ class ShoppingListManagerCard extends LitElement {
     :host([data-hub][data-ui][data-mode="dark"]) {
       --slm-bg-main: var(--hub-m-main, #111f2f); --slm-bg-surface: var(--hub-surface, #162b41); --slm-bg-elevated: var(--hub-surface-2, #1c354e); --slm-tile-bg: var(--hub-surface, #162b41);
       --slm-border-subtle: rgba(255,255,255,0.09); --slm-line-soft: rgba(255,255,255,0.06);
-      --slm-accent-primary: #4fd1a1; --slm-accent-soft: rgba(79,209,161,0.18); --slm-accent-text: #8fe8c6;
-      --slm-accent-ink: #06261d; --slm-on-cat: #06261d; --slm-total-bar-bg: #4fd1a1;
+      --slm-accent-primary: var(--hub-accent); --slm-accent-soft: color-mix(in srgb, var(--hub-accent) 18%, transparent); --slm-accent-text: var(--hub-accent);
+      --slm-accent-ink: var(--hub-accent-ink); --slm-on-cat: #06261d; --slm-total-bar-bg: var(--hub-accent);
     }
     :host([data-hub][data-ui][data-mode="light"]) {
       --slm-bg-main: var(--hub-m-main, #eef3f7); --slm-bg-surface: var(--hub-surface, #ffffff); --slm-bg-elevated: var(--hub-surface-2, #f3f7fa); --slm-tile-bg: var(--hub-surface, #ffffff);
       --slm-border-subtle: rgba(20,40,60,0.10); --slm-line-soft: rgba(20,40,60,0.07);
-      --slm-accent-primary: #1f9d7c; --slm-accent-soft: rgba(31,157,124,0.14); --slm-accent-text: #14735a;
-      --slm-accent-ink: #ffffff; --slm-total-bar-bg: #1f9d7c;
+      --slm-accent-primary: var(--hub-accent); --slm-accent-soft: color-mix(in srgb, var(--hub-accent) 14%, transparent); --slm-accent-text: var(--hub-accent);
+      --slm-accent-ink: var(--hub-accent-ink); --slm-total-bar-bg: var(--hub-accent);
     }
     :host([data-embedded][data-ui="fresh"]) .fab { bottom: 76px; }
     :host([data-embedded][data-ui="fresh"]) .content-area { padding-bottom: 96px; }

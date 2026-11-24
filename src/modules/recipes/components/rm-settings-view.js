@@ -4,7 +4,6 @@
  */
 import { LitElement, html, css } from 'lit';
 import { msg, str, updateWhenLocaleChanges } from '@lit/localize';
-import { CARD_VERSION } from 'virtual:card-version';
 import { isWakeLockSupported } from '../services/wake-lock.js';
 import { THEMES, themeEntry } from '../styles/ui-styles.js';
 
@@ -25,8 +24,6 @@ class RmSettingsView extends LitElement {
     settings:      { type: Object },
     hubMode:       { type: Boolean, attribute: 'hub-mode' },
     _activeTab:    { type: String },
-    _rmVersion:    { type: String },
-    _rmcVersion:   { type: String },
     _backupState:  { type: String },
   };
 
@@ -35,15 +32,10 @@ class RmSettingsView extends LitElement {
     updateWhenLocaleChanges(this); // re-render when the language file finishes loading
     this.settings = {};
     this._activeTab   = 'appearance';
-    this._rmVersion   = '…';
-    this._rmcVersion  = '…';
     this._backupState = null;
   }
 
   updated(changedProps) {
-    if (changedProps.has('hass') && this.hass && this._rmVersion === '…') {
-      this._fetchVersionsFromHacs();
-    }
   }
 
   async _backup() {
@@ -65,23 +57,6 @@ class RmSettingsView extends LitElement {
       this._backupState = 'error';
     }
     setTimeout(() => { this._backupState = null; }, 3000);
-  }
-
-  _fetchVersionsFromHacs() {
-    if (!this.hass) return;
-    this._rmVersion  = '…';
-    this._rmcVersion = '…';
-    this.hass.callWS({ type: 'hacs/repositories/list' })
-      .then(repos => {
-        const rm  = repos.find(r => r.full_name.toLowerCase() === 'thekiwismarthome/recipe-manager');
-        const rmc = repos.find(r => r.full_name.toLowerCase() === 'thekiwismarthome/recipe-manager-card');
-        this._rmVersion  = rm?.installed_version  ?? '—';
-        this._rmcVersion = rmc?.installed_version ?? CARD_VERSION;
-      })
-      .catch(() => {
-        this._rmVersion  = '—';
-        this._rmcVersion = CARD_VERSION;
-      });
   }
 
   // Dark palette in use right now (for the theme previews)
@@ -291,6 +266,17 @@ class RmSettingsView extends LitElement {
             ${[2, 3, 4, 5, 8, 10].map(n => html`
               <button class="seg-btn ${s.columns === n ? 'active' : ''}"
                 @click=${() => this._update({ columns: n })}>${n}</button>
+            `)}
+          </div>
+        </div>
+
+        <div class="setting-row">
+          ${this._tile('mdi:view-agenda-outline', 3)}
+          <span class="setting-name">${msg('Recipe view')}</span>
+          <div class="btn-group">
+            ${[['list', msg('List')], ['tiles', msg('Tiles')]].map(([val, lbl]) => html`
+              <button class="seg-btn ${(s.recipeView ?? 'list') === val ? 'active' : ''}"
+                @click=${() => this._update({ recipeView: val })}>${lbl}</button>
             `)}
           </div>
         </div>
@@ -600,30 +586,6 @@ class RmSettingsView extends LitElement {
           </div>
           <ha-icon icon="mdi:open-in-new" class="help-link-ext"></ha-icon>
         </a>
-      </div>
-
-      <div class="section">
-        <div class="section-label">${msg('About')}</div>
-
-        <div class="setting-row">
-          ${this._tile('mdi:chef-hat', 1)}
-          <span class="setting-name">${msg('Recipe Manager')}</span>
-          <span class="muted-note">${msg(str`Integration version ${this._rmVersion}`)}</span>
-        </div>
-
-        <div class="setting-row">
-          ${this._tile('mdi:card-text-outline', 2)}
-          <span class="setting-name">${msg('RM Card')}</span>
-          <span class="muted-note">${msg(str`Card version ${this._rmcVersion}`)}</span>
-        </div>
-
-        <div class="setting-row">
-          ${this._tile('mdi:refresh', 5)}
-          <span class="setting-name">${msg('Refresh versions')}</span>
-          <button class="seg-btn" @click=${() => this._fetchVersionsFromHacs()}>
-            <ha-icon icon="mdi:refresh"></ha-icon>
-          </button>
-        </div>
       </div>
     `;
   }

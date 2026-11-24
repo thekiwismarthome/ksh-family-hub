@@ -2,6 +2,16 @@
 
 Versions now follow the date: **YEAR.MONTH.RELEASE**, with a `-betaN` suffix while in beta (the first one is 2026.11.1-beta6, after 0.1.0-beta.5).
 
+## 2026.11.1-beta9
+
+- **Meals: tiles or list.** A button at the top of Recipes switches between the list and tiles (and Meals settings → Recipe grid → Recipe view); the choice is remembered.
+- **Summary cards are back**, in the theme colour: *Left to buy / Estimated* at the top of a shopping list, and *Tonight* (what is planned for dinner, with a Cook or Plan button and how many dinners are planned this week) at the top of Recipes.
+- **Shopping**: the list title no longer has a chevron and no longer jumps to Lists (use the Lists tab); the search button is gone (the search bar is always there); the *Estimated total* bar at the bottom is gone (the summary card at the top has it).
+- Shopping and Meals now use the theme's colours for their buttons and highlights instead of their own green and orange.
+- **Kids screen link**: Chores settings → Kids screen has a *Link* button for each child that copies an address (`/ksh-family-hub?kids=Mia`) opening the screen full size, with no dashboard card needed.
+- **Shopping and Meals no longer show their own version numbers.** They are not separate apps any more: the version is under the hub's Settings → About.
+- Fixed a second warning in the Home Assistant log: the shopping image folder was set up on Home Assistant's main thread at start-up. It now runs in the background.
+
 ## 2026.11.1-beta8
 
 - **Ten colour themes, each with a light and a dark version**, taken from the mobile app palettes on paletadecolores.org: Graphite, Fintech blue and green (the new default), Indigo calendar, Fresh food green, Health and wellness, Delivery orange, Coral dating, Social pink and purple, Roasted café and Lavender meditation. Choose one in Settings → Theme; Dark / Light / Match Home Assistant still decides which version you see. The dark versions use a calm, near-neutral background so the colour stays on the buttons, tabs and highlights. The themes colour every part of the hub, including Shopping and Meals. If you had picked Midnight, Slate, Forest or Dusk before, you get the nearest new theme.
