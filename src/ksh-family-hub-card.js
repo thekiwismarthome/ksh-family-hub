@@ -657,15 +657,13 @@ export class KshFamilyHubCard extends LitElement {
     .tile {
       position: relative; display: inline-flex; align-items: center; justify-content: center;
       width: 42px; height: 42px; border-radius: 14px; flex: none;
-      background: color-mix(in srgb, var(--c) 20%, transparent);
-      color: var(--c);
+      background: var(--hub-surface-2);
+      color: var(--hub-muted);
       transition: background .15s, color .15s, transform .15s;
       --mdc-icon-size: 24px;
     }
     .tile.lg { width: 54px; height: 54px; border-radius: 17px; --mdc-icon-size: 28px; }
-    .tile.active { background: var(--c); color: var(--hub-accent-ink); }
-    :host(:not([data-mode="light"])) .tile.active { color: #0d2233; }
-    .tile.more { background: rgba(160, 178, 197, 0.16); color: var(--hub-muted); }
+    .tile.active { background: var(--hub-accent); color: var(--hub-accent-ink); }
     :host([data-mode="light"]) .tile.more { background: rgba(60, 80, 100, 0.1); }
     .tile.more.active { background: var(--hub-accent); color: var(--hub-accent-ink); }
     .label { font-size: 12px; font-weight: 600; color: var(--hub-muted); line-height: 1.15; }
@@ -696,7 +694,7 @@ export class KshFamilyHubCard extends LitElement {
       display: flex; flex-direction: column; align-items: center; gap: 3px;
     }
     .rail-item.active .label { color: var(--hub-text); font-weight: 800; }
-    .rail-item:hover .tile:not(.active) { background: color-mix(in srgb, var(--c) 30%, transparent); }
+    .rail-item:hover .tile:not(.active) { background: color-mix(in srgb, var(--hub-accent) 16%, var(--hub-surface-2)); color: var(--hub-text); }
 
     /* ---- more sheet ---- */
     .scrim { position: absolute; inset: 0; background: rgba(4, 12, 20, 0.55); z-index: 20; animation: fade .18s ease; }

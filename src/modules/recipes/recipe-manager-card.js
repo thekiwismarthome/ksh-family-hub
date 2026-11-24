@@ -1228,7 +1228,7 @@ class RecipeManagerCard extends LitElement {
             : inDetail ? ''
               : this._view === 'planner' ? msg('Meal Planner')
                 : this._view === 'shopping' ? msg('Shopping List')
-                  : msg('Recipes');
+                  : this.hubMode ? '' : msg('Recipes');   // the hub's top bar already says Meals
 
     return html`
       <div class="rm-header">

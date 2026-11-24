@@ -1,5 +1,6 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { avatar, avatarCss, faceContent } from '../../hub/avatar.js';
+import '../../hub/emoji-picker.js';
 import { enableSwipeClose } from '../../hub/swipe.js';
 import { resolveActing, actingMsg, setToken } from '../../hub/actor.js';
 import { CATEGORIES, categoryById, EVENT_EMOJIS, REMIND_OPTIONS } from './categories.js';
@@ -722,7 +723,7 @@ class KshCalendarModule extends LitElement {
           <button type="button" class="chip ${d.category === c.id ? 'on' : ''}" @click=${() => this._pickCategory(c)}>${c.emoji} ${c.label}</button>`)}</div>
 
         <label>Picture</label>
-        <div class="emoji-list">${EVENT_EMOJIS.map(e => html`<button type="button" class="${e === d.emoji ? 'on' : ''}" @click=${() => this._set('emoji', e)}>${e}</button>`)}</div>
+        <ksh-emoji-picker .value=${d.emoji} .quick=${EVENT_EMOJIS} @emoji-pick=${e => this._set('emoji', e.detail.emoji)}></ksh-emoji-picker>
 
         <label>Who is it for</label>
         ${this._chips(d.people, id => this._set('people', d.people.includes(id) ? d.people.filter(x => x !== id) : [...d.people, id]), () => this._set('people', []))}

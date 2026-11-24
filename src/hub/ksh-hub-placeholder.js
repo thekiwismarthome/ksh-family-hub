@@ -22,7 +22,7 @@ class KshHubPlaceholder extends LitElement {
     .wrap { text-align: center; padding: 24px; max-width: 360px; display: grid; gap: 10px; justify-items: center; }
     .tile {
       width: 76px; height: 76px; border-radius: 24px; display: flex; align-items: center; justify-content: center;
-      background: color-mix(in srgb, var(--c) 20%, transparent); color: var(--c); --mdc-icon-size: 40px;
+      background: var(--hub-surface-2); color: var(--hub-muted); --mdc-icon-size: 40px;
     }
     h2 { margin: 8px 0 0; font-size: 22px; }
     p { margin: 0; color: var(--hub-muted); font-size: 14.5px; }

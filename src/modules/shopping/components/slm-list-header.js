@@ -147,9 +147,11 @@ class SLMListHeader extends LitElement {
     return html`
       <div class="header">
         ${this.hub ? html`
-          <div class="title-btn static">
-            <span class="title-line">${this.activeList?.name || t('Shopping List')}</span>
-          </div>` : html`
+          <span class="grow"></span>
+          <button class="round" aria-label=${viewMode === 'tile' ? t('List') : t('Tiles')} title=${viewMode === 'tile' ? t('List') : t('Tiles')}
+            @click=${() => this._dispatchSetting('viewMode', viewMode === 'tile' ? 'list' : 'tile')}>
+            <ha-icon icon=${viewMode === 'tile' ? 'mdi:view-agenda-outline' : 'mdi:view-grid-outline'}></ha-icon>
+          </button>` : html`
           <button class="title-btn" @click=${this.handleBack} aria-label=${t('Lists')}>
             <span class="title-line">${this.activeList?.name || t('Shopping List')}<ha-icon class="muted" icon="mdi:chevron-down"></ha-icon></span>
             <span class="subtitle">${this.itemCount} ${t('left')} · ${this.currencySymbol}${Number(this.totalAmount || 0).toFixed(2)}</span>
@@ -163,11 +165,12 @@ class SLMListHeader extends LitElement {
           </button>
           ${this._menuOpen ? html`
             <div class="menu-dropdown" role="menu" @click=${e => e.stopPropagation()}>
+              ${this.hub ? '' : html`
               <div class="menu-section-label">${t('View')}</div>
               <div class="seg">
                 <button aria-pressed=${viewMode === 'list' ? 'true' : 'false'} @click=${() => { this._dispatchSetting('viewMode', 'list'); this._menuOpen = false; }}><ha-icon icon="mdi:format-list-bulleted"></ha-icon>${t('List')}</button>
                 <button aria-pressed=${viewMode === 'tile' ? 'true' : 'false'} @click=${() => { this._dispatchSetting('viewMode', 'tile'); this._menuOpen = false; }}><ha-icon icon="mdi:view-grid-outline"></ha-icon>${t('Tiles')}</button>
-              </div>
+              </div>`}
               ${viewMode === 'tile' ? html`
                 <div class="menu-section-label">${t('Tiles per row')}</div>
                 <div class="seg" role="radiogroup" aria-label=${t('Tiles per row')}>
@@ -533,6 +536,7 @@ class SLMListHeader extends LitElement {
       text-align: left;
       cursor: pointer;
     }
+    .grow { flex: 1; }
     .title-btn.static { cursor: default; }
     .switcher.static { cursor: default; }
     .title-line {

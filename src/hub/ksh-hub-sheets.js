@@ -3,6 +3,7 @@ import { enableSwipeClose } from './swipe.js';
 import { getActing, actingMsg, resolveActing } from './actor.js';
 import { EMOJIS } from '../modules/chores/templates.js';
 import { avatar, avatarCss, haPicture, shrinkImage } from './avatar.js';
+import './emoji-picker.js';
 
 const LANGUAGES = [
   ['en', 'English'], ['es', 'Español'], ['fr', 'Français'], ['de', 'Deutsch'],
@@ -449,8 +450,7 @@ class KshHubSheets extends LitElement {
       ${!f.user_id && mode !== 'own' ? html`<p class="hint">The Home Assistant picture needs a linked login.</p>` : nothing}
       ${mode === 'own' ? html`<button type="button" class="linkbtn" @click=${() => set({ photo: null })}>Remove the picture</button>` : nothing}
       ${mode === 'emoji' ? html`
-        <div class="emojis"><input class="emoji-in" maxlength="8" .value=${f.emoji} @input=${e => set({ emoji: e.target.value })}>
-          ${EMOJIS.map(e => html`<button type="button" class=${e === f.emoji ? 'on' : ''} @click=${() => set({ emoji: e })}>${e}</button>`)}</div>` : nothing}`;
+        <ksh-emoji-picker .value=${f.emoji} .quick=${EMOJIS} @emoji-pick=${e => set({ emoji: e.detail.emoji })}></ksh-emoji-picker>` : nothing}`;
   }
 
   _region() {
@@ -504,7 +504,7 @@ class KshHubSheets extends LitElement {
     .row[disabled] { cursor: default; opacity: .6; }
     .ico {
       width: 42px; height: 42px; border-radius: 14px; flex: none; display: inline-flex; align-items: center; justify-content: center;
-      background: color-mix(in srgb, var(--c, var(--hub-accent)) 20%, transparent); color: var(--c, var(--hub-accent)); --mdc-icon-size: 24px;
+      background: var(--hub-surface-2); color: var(--hub-muted); --mdc-icon-size: 24px;
     }
     .txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
     .txt b { font-size: 15.5px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

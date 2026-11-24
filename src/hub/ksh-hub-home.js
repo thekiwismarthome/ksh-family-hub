@@ -195,18 +195,18 @@ class KshHubHome extends LitElement {
     .card h2 { margin: 0; font-size: 15px; font-weight: 700; }
     .dot {
       width: 34px; height: 34px; border-radius: 11px; display: inline-flex; align-items: center; justify-content: center;
-      background: color-mix(in srgb, var(--c) 20%, transparent); color: var(--c); --mdc-icon-size: 20px;
+      background: var(--hub-surface-2); color: var(--hub-muted); --mdc-icon-size: 20px;
     }
     .big { margin: 8px 0 0; font-size: 34px; font-weight: 800; line-height: 1; }
     .big span { font-size: 15px; font-weight: 600; color: var(--hub-muted); }
     .muted { margin: 4px 0 0; color: var(--hub-muted); font-size: 14px; }
     ul { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; }
     li { display: flex; gap: 10px; align-items: baseline; font-size: 14.5px; }
-    .kind { width: 74px; flex: none; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: var(--c); }
+    .kind { width: 74px; flex: none; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: var(--hub-muted); }
     .name { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .link {
       margin-top: auto; align-self: flex-start; display: inline-flex; align-items: center; background: none; border: none;
-      cursor: pointer; padding: 6px 0 0; font-weight: 700; font-size: 13.5px; color: var(--c);
+      cursor: pointer; padding: 6px 0 0; font-weight: 700; font-size: 13.5px; color: var(--hub-accent);
     }
     .link ha-icon { --mdc-icon-size: 18px; }
     .section { margin: 28px 2px 12px; font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; color: var(--hub-muted); }
@@ -214,8 +214,10 @@ class KshHubHome extends LitElement {
     .grid-item { background: none; border: none; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 0; }
     .tile {
       position: relative; width: 54px; height: 54px; border-radius: 17px; display: inline-flex; align-items: center; justify-content: center;
-      background: color-mix(in srgb, var(--c) 20%, transparent); color: var(--c); --mdc-icon-size: 28px;
+      background: var(--hub-surface); color: var(--hub-muted); border: 1px solid var(--hub-border); --mdc-icon-size: 28px;
+      transition: background .15s, color .15s;
     }
+    .grid-item:hover .tile { background: color-mix(in srgb, var(--hub-accent) 16%, var(--hub-surface)); color: var(--hub-accent); }
     .label { font-size: 12.5px; font-weight: 700; }
   `];
 }

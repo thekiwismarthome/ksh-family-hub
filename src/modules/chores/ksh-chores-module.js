@@ -6,6 +6,7 @@ import { celebrate, CELEBRATIONS, DEFAULT_CELEBRATION } from '../../hub/celebrat
 import { CHORE_TEMPLATES, ROUTINE_TEMPLATES, REWARD_TEMPLATES, EMOJIS, DAY_NAMES } from './templates.js';
 import { money, parseMoney, moneyInput } from '../../hub/money.js';
 import { avatar, avatarCss } from '../../hub/avatar.js';
+import '../../hub/emoji-picker.js';
 
 const ACCENT = '#3db6cc';
 
@@ -1153,11 +1154,7 @@ class KshChoresModule extends LitElement {
   }
 
   _emojiPicker(value, onPick) {
-    return html`
-      <div class="emoji-row">
-        <input class="emoji-input" maxlength="8" .value=${value} @input=${e => onPick(e.target.value)} aria-label="Emoji">
-        <div class="emoji-list">${EMOJIS.map(e => html`<button type="button" class="${e === value ? 'on' : ''}" @click=${() => onPick(e)}>${e}</button>`)}</div>
-      </div>`;
+    return html`<ksh-emoji-picker .value=${value} .quick=${EMOJIS} @emoji-pick=${e => onPick(e.detail.emoji)}></ksh-emoji-picker>`;
   }
 
   _choreSheet() {
@@ -1254,7 +1251,7 @@ class KshChoresModule extends LitElement {
         ${d.steps.map((s, i) => html`
           <div class="stepwrap">
           <div class="step">
-            <input class="se" maxlength="8" .value=${s.emoji || ''} placeholder="🙂" @input=${e => this._setStep(i, { emoji: e.target.value })} aria-label="Step emoji">
+            <ksh-emoji-picker compact .value=${s.emoji || ''} .quick=${EMOJIS} @emoji-pick=${e => this._setStep(i, { emoji: e.detail.emoji })}></ksh-emoji-picker>
             <input class="st" maxlength="60" .value=${s.text} placeholder="Step ${i + 1}" @input=${e => this._setStep(i, { text: e.target.value })}>
             <button type="button" class="mini" @click=${() => this._moveStep(i, -1)} aria-label="Move up"><ha-icon icon="mdi:arrow-up"></ha-icon></button>
             <button type="button" class="mini" @click=${() => this._moveStep(i, 1)} aria-label="Move down"><ha-icon icon="mdi:arrow-down"></ha-icon></button>
@@ -1474,7 +1471,7 @@ class KshChoresModule extends LitElement {
     .emoji-list button { width: 38px; height: 38px; font-size: 20px; border-radius: 12px; border: 1px solid transparent; background: var(--hub-surface); }
     .emoji-list button.on { border-color: var(--hub-accent); }
     .step { display: flex; gap: 6px; align-items: center; }
-    .step .se { width: 52px !important; text-align: center; padding: 11px 4px !important; }
+    .step ksh-emoji-picker { flex: none; }
     .step .st { flex: 1; min-width: 0; }
     .cels { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; padding: 12px; }
     .cel { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 14px 8px; border-radius: 16px; text-align: center;

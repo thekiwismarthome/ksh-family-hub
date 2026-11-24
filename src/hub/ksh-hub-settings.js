@@ -97,7 +97,7 @@ class KshHubSettings extends LitElement {
         ${items.map(item => {
           const on = !blocked.includes(item.id);
           return html`
-            <div class="row slim" style="--c:${item.color}">
+            <div class="row slim ${on ? 'on' : ''}">
               <span class="dot sm"><ha-icon icon=${item.icon}></ha-icon></span>
               <div class="txt"><div class="name">${item.label}</div></div>
               <button class="switch ${on ? 'on' : ''}" role="switch" aria-checked=${on ? 'true' : 'false'}
@@ -115,7 +115,7 @@ class KshHubSettings extends LitElement {
       const partOff = item.module && !this.info?.modules?.[item.module] && !PARTS.includes(item.id);
       const on = this._isOn(item);
       return html`
-        <div class="row" style="--c:${item.color}">
+        <div class="row ${on ? 'on' : ''}">
           <span class="dot"><ha-icon icon=${item.icon}></ha-icon></span>
           <div class="txt">
             <div class="name">${item.label}</div>
@@ -211,8 +211,9 @@ class KshHubSettings extends LitElement {
     .row + .row { border-top: 1px solid var(--hub-border); }
     .dot {
       width: 40px; height: 40px; border-radius: 13px; flex: none; display: inline-flex; align-items: center; justify-content: center;
-      background: color-mix(in srgb, var(--c) 20%, transparent); color: var(--c); --mdc-icon-size: 22px;
+      background: var(--hub-surface-2); color: var(--hub-muted); --mdc-icon-size: 22px; transition: background .15s, color .15s;
     }
+    .row.on .dot { background: color-mix(in srgb, var(--hub-accent) 18%, transparent); color: var(--hub-accent); }
     .txt { flex: 1; min-width: 0; }
     .name { font-weight: 700; font-size: 15px; }
     .desc { color: var(--hub-muted); font-size: 12.5px; margin-top: 2px; }

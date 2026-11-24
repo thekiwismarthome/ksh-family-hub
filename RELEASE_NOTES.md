@@ -2,6 +2,12 @@
 
 Versions now follow the date: **YEAR.MONTH.RELEASE**, with a `-betaN` suffix while in beta (the first one is 2026.11.1-beta6, after 0.1.0-beta.5).
 
+## 2026.11.1-beta10
+
+- **A searchable emoji picker everywhere an emoji is chosen** (chores, routine steps, rewards, calendar events, people, what money was spent on). Type a word ("swim", "dentist", "bins", "piano") and it finds the emoji; or browse about 1,800 emojis by group. The few you use most are remembered and shown first, and the usual suggestions are still there. The list comes from the Unicode emoji names and keywords, with extra words added for lessons, sports, appointments and chores (for example *swimming lessons* finds the swimmer).
+- **Neutral menu icons.** The icons in the bottom bar, the side rail, the More sheet, the Home page and the menu settings are all one calm neutral colour now. The one you are on (or, in settings, each part that is switched on) takes the theme's colour.
+- **Shopping**: the list and recipe titles under the top bar are gone (the top bar already says where you are). Shopping has a tiles / list button next to the three dots, and the View choice is removed from the three-dot menu.
+
 ## 2026.11.1-beta9
 
 - **Meals: tiles or list.** A button at the top of Recipes switches between the list and tiles (and Meals settings → Recipe grid → Recipe view); the choice is remembered.

@@ -1,5 +1,6 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { avatar, avatarCss, faceContent } from '../../hub/avatar.js';
+import '../../hub/emoji-picker.js';
 import { enableSwipeClose } from '../../hub/swipe.js';
 import { resolveActing, actingMsg, setToken } from '../../hub/actor.js';
 import { money, parseMoney, moneyInput } from '../../hub/money.js';
@@ -373,7 +374,7 @@ class KshFinanceModule extends LitElement {
       <div class="form">
         <label>Whose money</label>${this._whoChips(d.person)}
         <label>What was it spent on<input .value=${d.note} maxlength="80" placeholder="Lego set" @input=${e => this._set('note', e.target.value)}></label>
-        <div class="emoji-list">${SPEND_EMOJIS.map(e => html`<button type="button" class="${e === d.emoji ? 'on' : ''}" @click=${() => this._set('emoji', e)}>${e}</button>`)}</div>
+        <ksh-emoji-picker .value=${d.emoji} .quick=${SPEND_EMOJIS} @emoji-pick=${e => this._set('emoji', e.detail.emoji)}></ksh-emoji-picker>
         <label>Price<input inputmode="decimal" .value=${d.price} placeholder="40.00" @input=${e => this._set('price', e.target.value)}></label>
         <div class="chips">
           <button type="button" class="chip" @click=${() => this._autoSplit('cash')}>All from Cash</button>
