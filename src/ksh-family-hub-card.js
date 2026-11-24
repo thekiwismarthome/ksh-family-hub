@@ -36,7 +36,8 @@ const THEME_KEY = 'ksh_hub_theme';
 const PALETTE_KEY = 'ksh_hub_palette';
 const HOUSEHOLD_KEY = 'ksh_hub_household';
 const RAIL_MIN_WIDTH = 700;
-const LOGO_URL = `/ksh_family_hub/static/ksh-logo.png?v=${CARD_VERSION}`;
+// next to the app's files (this file is in chunks/), so it works behind a sub-path proxy and in the website demo too
+const LOGO_URL = `${new URL('../ksh-logo.png', import.meta.url).href}?v=${CARD_VERSION}`;
 
 // Menu entries backed by a real module element
 const MODULE_ELEMENT = { shopping: 'ksh-shopping-module', cards: 'ksh-shopping-module', meals: 'ksh-recipes-module', chores: 'ksh-chores-module', calendar: 'ksh-calendar-module', finance: 'ksh-finance-module' };

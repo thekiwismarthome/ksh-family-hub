@@ -2,6 +2,11 @@
 
 Versions follow the date: **YEAR.MONTH.RELEASE**, with a `-betaN` suffix while in beta.
 
+## 2026.11.2
+
+- The logo is found next to the app's own files instead of at a fixed Home Assistant path, so it also shows when Home Assistant is behind a sub-path proxy, and in the website demo.
+- The website (<https://thekiwismarthome.github.io/ksh-family-hub/>) with a live demo and 16 tutorials and how-tos goes live with this release. The demo uses sample people and data only.
+
 ## 2026.11.1
 
 The first full release. Everything from the betas below, plus a round of speed work for using the hub away from home and a review of the whole thing.

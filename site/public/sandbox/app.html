@@ -1,0 +1,194 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>KSH Family Hub demo</title><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+@font-face { font-family: "Material Design Icons"; src: url(mdi/mdi.woff2) format("woff2"); font-display: block; }
+html,body{margin:0;height:100%;background:#0b1520;font-family:Roboto,system-ui,sans-serif}
+body{--primary-text-color:#e8eef5;--card-background-color:#162b41;--divider-color:#2a4058;--primary-color:#03a9f4}
+#wrap{height:100%}
+ksh-family-hub-panel{display:block;height:100%}
+</style></head><body>
+<div id="wrap"></div>
+<script src="ha-shims.js"></script>
+<script src="demo-backend.js"></script>
+<script>
+(async function(){
+  const q=new URLSearchParams(location.search);
+  const ver=await fetch('../version.json').then(r=>r.json()).then(j=>j.version).catch(()=>'2026.11');
+  const [cat,cats]=await Promise.all([fetch('data/catalog.json').then(r=>r.json()),fetch('data/categories.json').then(r=>r.json())]);
+  const be=createDemoBackend({catalog:cat,categories:cats},{user:{id:'u1',name:'Jordan Demo',is_admin:true},integrationVersion:ver});
+  const base=be.hass();
+  let hidden=[];const modules={recipes:q.get('recipes')!=='0',shopping:q.get('shopping')!=='0',chores:q.get('chores')!=='0',calendar:q.get('calendar')!=='0',finance:q.get('finance')!=='0'};
+  const today=new Date(); const p=n=>String(n).padStart(2,'0'); const iso=`${today.getFullYear()}-${p(today.getMonth()+1)}-${p(today.getDate())}`;
+  const pic=(emoji,c1,c2)=>'data:image/svg+xml;utf8,'+encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${c1}"/><stop offset="1" stop-color="${c2}"/></linearGradient></defs><rect width="400" height="300" fill="url(#g)"/><text x="200" y="190" font-size="120" text-anchor="middle">${emoji}</text></svg>`);
+  const now=new Date().toISOString();
+  const R=(id,name,emoji,c1,c2,course,cat,tags,prep,cook,servings,rating,fav,ing,steps,desc)=>({id,name,description:desc,tags,courses:[course],categories:[cat],collections:[],ingredients:ing.map(([n,a,u])=>({name:n,amount:a,unit:u||'',notes:''})),instructions:steps,prep_time:prep,cook_time:cook,total_time:prep+cook,servings,rating,is_favourite:fav,created_at:now,updated_at:now,image_url:pic(emoji,c1,c2),notes:null,nutrition:null,cuisine:null,category:null,servings_text:null,source_url:null});
+  const recipes=[
+    R('r1','Butter chicken','🍛','#f59a4d','#e04e0c','Dinner','Mains',['easy','family'],15,35,4,5,true,[['Chicken thigh','800','g'],['Butter','50','g'],['Onion','1',''],['Tomato passata','400','g'],['Cream','150','ml'],['Garam masala','2','tsp']],['Brown the chicken in the butter.','Add the onion and spices, then the passata.','Simmer for 25 minutes, stir in the cream.','Serve with rice and naan.'],'A mild, creamy curry the whole family eats.'),
+    R('r2','Lamb shanks','🍖','#8d6e63','#4e342e','Dinner','Mains',['slow cooker'],20,180,4,4,false,[['Lamb shanks','4',''],['Red wine','250','ml'],['Garlic','4','cloves'],['Rosemary','2','sprigs'],['Beef stock','500','ml']],['Brown the shanks.','Add everything to the slow cooker.','Cook on low for 8 hours.'],'Falls off the bone.'),
+    R('r3','Pavlova','🍓','#f8bbd0','#ec407a','Dessert','Baking',['kiwi classic'],30,90,8,5,true,[['Egg whites','6',''],['Caster sugar','300','g'],['Cornflour','2','tsp'],['Cream','300','ml'],['Strawberries','250','g'],['Kiwifruit','3','']],['Whisk the whites to stiff peaks, add the sugar slowly.','Fold in the cornflour, shape on a tray.','Bake at 120 degrees for 90 minutes, cool in the oven.','Top with cream and fruit.'],'The Kiwi Christmas dessert.'),
+    R('r4','Greek salad','🥗','#a5d6a7','#2e7d32','Lunch','Salads',['quick','vegetarian'],10,0,2,4,false,[['Cucumber','1',''],['Tomatoes','3',''],['Feta','150','g'],['Olives','1','handful'],['Olive oil','3','tbsp']],['Chop everything.','Toss with the oil and a pinch of oregano.'],'Ready in ten minutes.'),
+    R('r5','Fish and chips','🐟','#90caf9','#1565c0','Dinner','Mains',['friday'],20,25,4,4,false,[['White fish fillets','600','g'],['Potatoes','800','g'],['Flour','100','g'],['Sparkling water','150','ml']],['Cut and soak the chips, then oven bake.','Dip the fish in the batter and fry.','Serve with lemon.'],'Friday night tradition.'),
+    R('r6','Pancakes','🥞','#ffe082','#ff8f00','Breakfast','Breakfast',['weekend','kids'],10,15,4,5,true,[['Flour','200','g'],['Milk','300','ml'],['Eggs','2',''],['Baking powder','2','tsp']],['Whisk everything.','Cook spoonfuls on a hot pan until bubbles form, then flip.'],'Sunday morning.'),
+    R('r7','Spaghetti bolognese','🍝','#ef9a9a','#c62828','Dinner','Mains',['easy','family'],15,40,5,4,false,[['Beef mince','500','g'],['Spaghetti','400','g'],['Passata','500','g'],['Carrot','1',''],['Onion','1','']],['Brown the mince with the onion and carrot.','Add the passata and simmer for 30 minutes.','Cook the pasta, mix and serve.'],'A weeknight favourite.'),
+    R('r8','Banana bread','🍌','#ffe0b2','#bf8040','Dessert','Baking',['kids','lunchbox'],15,55,10,4,false,[['Ripe bananas','3',''],['Butter','100','g'],['Sugar','150','g'],['Flour','250','g'],['Eggs','2','']],['Mash the bananas, mix in the rest.','Bake at 170 degrees for 55 minutes.'],'Uses up the brown bananas.')];
+  const dayIso=n=>{const d=new Date();d.setDate(d.getDate()+n);return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`};
+  const meals=[{id:'m1',recipe_id:'r1',date:iso,meal_type:'dinner',servings:4,recipe_name:'Butter chicken'},{id:'m2',recipe_id:'r4',date:iso,meal_type:'lunch',servings:2,recipe_name:'Greek salad'},
+    {id:'m3',recipe_id:'r5',date:dayIso(1),meal_type:'dinner',servings:4,recipe_name:'Fish and chips'},{id:'m4',recipe_id:'r7',date:dayIso(2),meal_type:'dinner',servings:5,recipe_name:'Spaghetti bolognese'},
+    {id:'m5',recipe_id:'r6',date:dayIso(3),meal_type:'breakfast',servings:4,recipe_name:'Pancakes'}];
+
+  // ---- chores + people mock (mirrors the backend rules closely enough for UI checks) ----
+  let people=[{id:'p1',name:'Jordan',emoji:'🦊',color:'#4fd1a1',role:'adult',user_id:'u1',has_pin:false,notify:null},
+              {id:'p2',name:'Mia',full_name:'Mia Smith',preferred_name:'Mia',photo:'data:image/svg+xml;base64,'+btoa('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect width="10" height="10" fill="#e8639f"/><circle cx="5" cy="4" r="2.2" fill="#ffe0c9"/><rect x="2" y="7" width="6" height="4" rx="2" fill="#fff"/></svg>'),emoji:'🦄',color:'#e8639f',role:'child',user_id:null,has_pin:false,notify:null},
+              {id:'p3',name:'Leo',emoji:'🦖',color:'#3db6cc',role:'child',user_id:null,has_pin:true,notify:null},
+              {id:'p4',name:'Gran',emoji:'🐼',color:'#e2ac3f',role:'guest',user_id:null,has_pin:false,notify:null}];
+  const T=iso;
+  const ch={chores:[
+    {id:'c1',name:'Make bed',emoji:'🛏️',points:1,assignees:['p2'],recurrence:{type:'daily'},due_time:'07:30',remind:true,requires_approval:true,active:true},
+    {id:'c2',name:'Feed the pets',emoji:'🐶',points:2,assignees:[],recurrence:{type:'daily'},due_time:'17:30',remind:true,requires_approval:true,active:true},
+    {id:'c3',name:'Vacuum',emoji:'🧹',points:3,assignees:['p3','p2'],recurrence:{type:'daily'},due_time:null,remind:false,requires_approval:true,active:true},
+    {id:'c4',name:'Water the plants',emoji:'🪴',points:1,assignees:['p4'],recurrence:{type:'weekly',days:[0,1,2,3,4,5,6]},due_time:null,remind:false,requires_approval:true,active:true}],
+    routines:[{id:'r1',name:'Morning routine',emoji:'☀️',kind:'morning',points:3,assignees:['p2','p3'],active:true,steps:[{id:'s1',text:'Get dressed',emoji:'👕',days:[]},{id:'s2',text:'Eat breakfast',emoji:'🥣',days:[]},{id:'s3',text:'Brush teeth',emoji:'🪥',days:[]},{id:'s4',text:'Pack school bag',emoji:'🎒',days:[0,1,2,3,4]},{id:'s5',text:'Sports kit',emoji:'⚽',days:[2]}]}],
+    inst:{['c1:'+T]:{status:'done',done_by:'p2',done_at:'x',points:0},['c2:'+T]:{status:'approved',done_by:'p3',points:2}},
+    runs:{'r1:p2':{steps:['s1'],completed:false}},ledger:[{id:'l1',person_id:'p3',points:2,reason:'🐶 Feed the pets',at:new Date().toISOString()},{id:'l2',person_id:'p2',points:5,reason:'Bonus',at:new Date().toISOString()}]};
+  ch.cel={p3:'fireworks'};
+  ch.rewards=[{id:'w1',name:'Extra screen time (30 minutes)',emoji:'📺',cost:15,active:true},{id:'w2',name:'Ice cream treat',emoji:'🍦',cost:25,active:true},{id:'w3',name:'Choose what is for dinner',emoji:'🍽️',cost:20,active:true},{id:'w4',name:'New small toy or book',emoji:'🧩',cost:100,active:true}];
+  ch.reds=[{id:'q1',reward_id:'w1',name:'Extra screen time (30 minutes)',emoji:'📺',cost:15,person_id:'p3',status:'requested',at:new Date().toISOString()}];
+  ch.pocket={p2:{enabled:true,period:'week',points:20,amount:500,account:'bank',since:'2026-11-01',settled:null}};
+  ch.phist=[{person_id:'p2',start:'2026-11-09',end:'2026-11-16',earned:24,target:20,amount:500,paid:true,account:'bank'},{person_id:'p2',start:'2026-11-16',end:'2026-11-23',earned:11,target:20,amount:500,paid:false,account:'bank'}];
+  const actorOf0=null;
+  const actorOf=m=>people.find(p=>p.id===(m.as_person||'p1'));
+  const mut=(m,adultOnly,fn)=>{const a=actorOf(m);if(adultOnly&&a.role!=='adult')return Promise.reject({message:'Only an adult can do that'});try{return Promise.resolve(fn(a)||{ok:true})}catch(e){return Promise.reject({message:e.message})}};
+  const bal=()=>{const b={};ch.ledger.forEach(e=>b[e.person_id]=(b[e.person_id]||0)+e.points);return b};
+  function chores(t,m){
+    const c=t.slice(11);
+    if(c==='subscribe')return Promise.resolve({subscribed:true});
+    if(c==='get_state'){const day=m.date||iso;
+      const items=ch.chores.filter(x=>x.active&&!(x.start&&x.start>day)).map(x=>{const i=ch.inst[x.id+':'+day];return {chore_id:x.id,date:day,status:i?i.status:'open',done_by:i?.done_by||null,points:i?.points||0,note:i?.note||null}});
+      const pending=Object.entries(ch.inst).filter(([k,v])=>v.status==='done').map(([k,v])=>({chore_id:k.split(':')[0],date:k.split(':')[1],status:'done',done_by:v.done_by}));
+      const y=new Date();y.setDate(y.getDate()-1);const yi=`${y.getFullYear()}-${p(y.getMonth()+1)}-${p(y.getDate())}`;
+      const overdue=ch.chores.filter(x=>x.id==='c3'&&!ch.inst[x.id+':'+yi]).map(x=>({chore_id:x.id,date:yi,status:'open',done_by:null,points:0,note:null}));
+      return Promise.resolve({date:day,today:iso,chores:ch.chores,routines:ch.routines,items,overdue,pending,runs:ch.runs,balances:bal(),history:[...ch.ledger].reverse(),celebrations:{...ch.cel},rewards:ch.rewards,redemptions:ch.reds,pocket:Object.fromEntries(Object.entries(ch.pocket).map(([k,v])=>[k,{...v,start:'2026-11-23',end:'2026-11-30',earned:ch.ledger.filter(e=>e.person_id===k).reduce((n,e)=>n+e.points,0)+9,starts_next:false}])),pocket_history:ch.phist});}
+    if(c==='get_range'){const items=[];for(let d=new Date(m.start+'T12:00');d<=new Date(m.end+'T12:00');d.setDate(d.getDate()+1)){const k=`${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;ch.chores.forEach(x=>{if(x.active&&(x.id==='c2'||x.id==='c3'||(x.id==='c1'&&d.getDay()%2===0)))items.push({chore_id:x.id,date:k,status:(ch.inst[x.id+':'+k]||{}).status||'open'})})}return Promise.resolve({items,chores:ch.chores.map(x=>({id:x.id,name:x.name,emoji:x.emoji,assignees:x.assignees,due_time:x.due_time,points:x.points}))});}
+    if(c==='complete')return mut(m,false,a=>{const k=m.chore_id+':'+(m.date||iso);const x=ch.chores.find(z=>z.id===m.chore_id);const adult=a.role==='adult';
+      ch.inst[k]={status:adult?'approved':'done',done_by:a.id,points:adult?x.points:0};if(adult)ch.ledger.push({id:'n'+Math.random(),person_id:a.id,points:x.points,reason:x.emoji+' '+x.name,at:new Date().toISOString()});return {status:adult?'approved':'done',awarded:adult,celebration:ch.cel[a.id]||'tape'}});
+    if(c==='approve')return mut(m,true,a=>{const k=m.chore_id+':'+(m.date||iso);const i=ch.inst[k];const x=ch.chores.find(z=>z.id===m.chore_id);i.status='approved';i.points=x.points;ch.ledger.push({id:'n'+Math.random(),person_id:i.done_by,points:x.points,reason:x.emoji+' '+x.name,at:new Date().toISOString()});return {status:'approved',awarded:true}});
+    if(c==='reject')return mut(m,true,a=>{ch.inst[m.chore_id+':'+(m.date||iso)]={status:'rejected',note:m.note}});
+    if(c==='reopen')return mut(m,false,a=>{delete ch.inst[m.chore_id+':'+(m.date||iso)]});
+    if(c==='chores/add')return mut(m,true,a=>{const x={id:'c'+Math.random(),active:true,remind:false,requires_approval:true,...m};delete x.type;delete x.id2;ch.chores.push(x);return {chore:x}});
+    if(c==='chores/update')return mut(m,true,a=>{Object.assign(ch.chores.find(z=>z.id===m.chore_id),m);return {}});
+    if(c==='chores/delete')return mut(m,true,a=>{ch.chores=ch.chores.filter(z=>z.id!==m.chore_id)});
+    if(c==='routines/add')return mut(m,true,a=>{ch.routines.push({id:'r'+Math.random(),active:true,...m,steps:m.steps.map((s,i)=>({id:'s'+i+Math.random(),...s}))})});
+    if(c==='routines/update')return mut(m,true,a=>{Object.assign(ch.routines.find(z=>z.id===m.routine_id),m)});
+    if(c==='routines/delete')return mut(m,true,a=>{ch.routines=ch.routines.filter(z=>z.id!==m.routine_id)});
+    if(c==='routines/step')return mut(m,false,a=>{const r=ch.routines.find(z=>z.id===m.routine_id);const wp=m.for_person||a.id;const k=r.id+':'+wp;const run=ch.runs[k]||(ch.runs[k]={steps:[],completed:false});
+      if(m.done&&!run.steps.includes(m.step_id))run.steps.push(m.step_id);if(!m.done)run.steps=run.steps.filter(x=>x!==m.step_id);let aw=false;
+      const wd=(new Date().getDay()+6)%7;const todays=r.steps.filter(z=>!(z.days||[]).length||z.days.includes(wd));if(todays.every(z=>run.steps.includes(z.id))&&!run.completed){run.completed=true;aw=true;ch.ledger.push({id:'n'+Math.random(),person_id:wp,points:r.points,reason:r.emoji+' '+r.name,at:new Date().toISOString()})}return {steps:run.steps,completed:run.completed,awarded:aw,celebration:ch.cel[a.id]||'tape'}});
+    if(c==='celebration/set')return mut(m,false,a=>{const pid=m.person_id||a.id;if(pid!==a.id&&a.role!=='adult')throw new Error('You can only change your own celebration');ch.cel[pid]=m.style;return {celebrations:ch.cel}});
+    if(c==='rewards/add')return mut(m,true,a=>{ch.rewards.push({id:'w'+Math.random(),active:true,...m});});
+    if(c==='rewards/update')return mut(m,true,a=>{Object.assign(ch.rewards.find(z=>z.id===m.reward_id),m)});
+    if(c==='rewards/delete')return mut(m,true,a=>{ch.rewards=ch.rewards.filter(z=>z.id!==m.reward_id)});
+    if(c==='redeem')return mut(m,false,a=>{const w=ch.rewards.find(z=>z.id===m.reward_id);const bal0=bal()[a.id]||0;if(bal0<w.cost)throw new Error('Not enough points yet');
+      if(a.role==='adult'){ch.ledger.push({id:'n'+Math.random(),person_id:a.id,points:-w.cost,reason:w.emoji+' '+w.name,at:new Date().toISOString()});return {status:'approved'}}
+      ch.reds.push({id:'q'+Math.random(),reward_id:w.id,name:w.name,emoji:w.emoji,cost:w.cost,person_id:a.id,status:'requested',at:new Date().toISOString()});return {status:'requested'}});
+    if(c==='redemptions/approve')return mut(m,true,a=>{const r=ch.reds.find(z=>z.id===m.redemption_id);r.status='approved';ch.ledger.push({id:'n'+Math.random(),person_id:r.person_id,points:-r.cost,reason:r.emoji+' '+r.name,at:new Date().toISOString()});return {status:'approved'}});
+    if(c==='redemptions/decline')return mut(m,true,a=>{ch.reds.find(z=>z.id===m.redemption_id).status='declined';return {status:'declined'}});
+    if(c==='redemptions/cancel')return mut(m,false,a=>{ch.reds=ch.reds.filter(z=>z.id!==m.redemption_id)});
+    if(c==='pocket/set')return mut(m,true,a=>{ch.pocket[m.person_id]={...(ch.pocket[m.person_id]||{}),...m};delete ch.pocket[m.person_id].type;return {pocket:ch.pocket[m.person_id]}});
+    if(c==='points/adjust')return mut(m,true,a=>{ch.ledger.push({id:'n'+Math.random(),person_id:m.person_id,points:m.points,reason:m.reason||'Adjustment',at:new Date().toISOString()})});
+    return Promise.resolve({});
+  }
+  // ---- calendar mock ----
+  const dd=n=>{const d=new Date();d.setDate(d.getDate()+n);return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`};
+  let cal={events:[
+    {id:'e1',title:'Swimming lessons',emoji:'🏊',category:'sport',people:['p2'],date:dd(-14),end_date:null,all_day:false,start_time:'16:00',end_time:'17:00',repeat:{type:'weekly',days:[1,3]},location:'Aquatic Centre',notes:'',remind:30},
+    {id:'e2',title:'Dentist: Mia',emoji:'🦷',category:'medical',people:['p2'],date:dd(2),end_date:null,all_day:false,start_time:'10:30',end_time:'11:15',repeat:{type:'none'},location:'Smile Dental',notes:'Bring the card',remind:60},
+    {id:'e3',title:'School disco',emoji:'🎉',category:'school',people:['p2','p3'],date:dd(4),end_date:null,all_day:false,start_time:'18:00',end_time:'20:00',repeat:{type:'none'},location:'School hall',notes:'',remind:null},
+    {id:'e4',title:'Leo birthday',emoji:'🎂',category:'birthday',people:[],date:dd(9),end_date:null,all_day:true,start_time:null,end_time:null,repeat:{type:'yearly'},location:'',notes:'',remind:null},
+    {id:'e5',title:'Year 5 camp',emoji:'🏕️',category:'school',people:['p3'],date:dd(6),end_date:dd(8),all_day:true,start_time:null,end_time:null,repeat:{type:'none'},location:'Lake Taupō',notes:'',remind:null},
+    {id:'e6',title:'Parents evening',emoji:'📚',category:'school',people:['p1'],date:dd(0),end_date:null,all_day:false,start_time:'19:00',end_time:null,repeat:{type:'none'},location:'',notes:'',remind:0}],
+    settings:{ha_calendars:['calendar.public_holidays'],show_chores:true}};
+  const occ=(e,day)=>{const s=new Date(e.date+'T12:00'),d=new Date(day+'T12:00');if(d<s)return false;const t=e.repeat.type;
+    if(t==='none')return day<=(e.end_date||e.date);if(t==='weekly')return (e.repeat.days||[]).includes((d.getDay()+6)%7);if(t==='yearly')return d.getMonth()===s.getMonth()&&d.getDate()===s.getDate();if(t==='daily')return true;return false};
+  function calendar(t,m){const c=t.slice(13);
+    if(c==='subscribe')return Promise.resolve({subscribed:true});
+    if(c==='get_events'){const out=[];for(let d=new Date(m.start+'T12:00');d<=new Date(m.end+'T12:00');d.setDate(d.getDate()+1)){const k=`${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;cal.events.forEach(e=>{if(occ(e,k))out.push({...e,event_id:e.id,occurs:k})})}return Promise.resolve({events:out,settings:cal.settings})}
+    const a=actorOf(m);if(a.role!=='adult')return Promise.reject({message:'Only an adult can change the calendar'});
+    if(c==='events/add'){const e={id:'e'+Math.random(),...m};delete e.type;delete e.id2;cal.events.push(e);return Promise.resolve({event:e})}
+    if(c==='events/update'){Object.assign(cal.events.find(z=>z.id===m.event_id),m);return Promise.resolve({})}
+    if(c==='events/delete'){cal.events=cal.events.filter(z=>z.id!==m.event_id);return Promise.resolve({})}
+    if(c==='settings/set'){Object.assign(cal.settings,m);delete cal.settings.type;return Promise.resolve({settings:cal.settings})}
+    return Promise.resolve({})}
+  // ---- finance mock ----
+  let fin={tx:[]};const fid=()=>'f'+Math.random().toString(36).slice(2,8);
+  const ago=n=>{const d=new Date();d.setDate(d.getDate()-n);return d.toISOString()};
+  const addTx=(g,p,acc,amt,kind,note,emoji,at,by)=>fin.tx.push({id:fid(),group:g,person_id:p,account:acc,amount:amt,kind,note,emoji,at,by,key:null,void:false});
+  addTx('g1','p2','bank',2000,'deposit','Birthday money','🎂',ago(20),'p1');addTx('g2','p2','cash',1500,'deposit','Gran visit','💵',ago(14),'p1');
+  addTx('g3','p2','bank',500,'pocket','Pocket money (09 Nov – 15 Nov)','💰',ago(9),'system');
+  addTx('g4','p2','cash',-800,'spend','Sweets and a magazine','🍬',ago(6),'p1');addTx('g5','p2','cash',-500,'spend','Lego set','🧱',ago(3),'p1');addTx('g5','p2','bank',-2500,'spend','Lego set','🧱',ago(3),'p1');
+  addTx('g6','p3','bank',900,'deposit','Birthday money','🎂',ago(5),'p1');addTx('g7','p3','cash',300,'deposit','Tooth fairy','🦷',ago(2),'p1');
+  const finBal=()=>{const b={};fin.tx.filter(t=>!t.void).forEach(t=>{(b[t.person_id]=b[t.person_id]||{cash:0,bank:0})[t.account]+=t.amount});return b};
+  function finance(t,m){const c=t.slice(12);const a=actorOf(m);const scope=a.role==='adult'?null:a.role==='guest'?[]:[a.id];
+    if(c==='subscribe')return Promise.resolve({subscribed:true});
+    if(c==='get_state'){const b=finBal();return Promise.resolve({balances:Object.fromEntries(Object.entries(b).filter(([k])=>!scope||scope.includes(k))),transactions:fin.tx.filter(x=>!scope||scope.includes(x.person_id)).slice().reverse()})}
+    if(a.role!=='adult')return Promise.reject({message:'Only an adult can change the money'});
+    const have=(p)=>finBal()[p]||{cash:0,bank:0};const now=new Date().toISOString();
+    if(c==='deposit'){addTx(fid(),m.person_id,m.account,m.amount,'deposit',m.note||'Money in','➕',now,a.id);return Promise.resolve({ok:true})}
+    if(c==='spend'){const h=have(m.person_id);if(m.cash>h.cash)return Promise.reject({message:'Not enough in Cash'});if(m.bank>h.bank)return Promise.reject({message:'Not enough in Bank'});const g=fid();
+      if(m.cash)addTx(g,m.person_id,'cash',-m.cash,'spend',m.note,m.emoji,now,a.id);if(m.bank)addTx(g,m.person_id,'bank',-m.bank,'spend',m.note,m.emoji,now,a.id);return Promise.resolve({ok:true})}
+    if(c==='transfer'){const g=fid();if(have(m.person_id)[m.from]<m.amount)return Promise.reject({message:'Not enough in '+m.from});addTx(g,m.person_id,m.from,-m.amount,'transfer',m.from+' to '+m.to,'🔁',now,a.id);addTx(g,m.person_id,m.to,m.amount,'transfer',m.from+' to '+m.to,'🔁',now,a.id);return Promise.resolve({ok:true})}
+    if(c==='void'){const x=fin.tx.find(z=>z.id===m.tx_id);fin.tx.filter(z=>z.group===x.group).forEach(z=>z.void=true);return Promise.resolve({voided:1})}
+    return Promise.resolve({})}
+  let prefs={order:[],blocked:{}};
+  window.__calls=[];
+  let hh=[{id:'h1',name:'The Demo Family',everyone:true,owner_id:null,members:[],can_manage:true}];
+  const states={'person.jordan':{entity_id:'person.jordan',state:'home',attributes:{user_id:'u1',friendly_name:'Jordan'}},'person.sam':{entity_id:'person.sam',state:'home',attributes:{user_id:'u2',friendly_name:'Sam'}},'person.alex':{entity_id:'person.alex',state:'away',attributes:{user_id:'u3',friendly_name:'Alex'}},'calendar.public_holidays':{entity_id:'calendar.public_holidays',state:'off',attributes:{friendly_name:'Public holidays'}},'calendar.family_google':{entity_id:'calendar.family_google',state:'off',attributes:{friendly_name:'Family (Google)'}}};
+
+  const hass=Object.assign({},base,{states,
+    callApi(method,path){const m=/^calendars\/([^?]+)\?start=([^&]+)&end=([^&]+)/.exec(path);if(!m)return Promise.resolve([]);
+      if(m[1]!=='calendar.public_holidays')return Promise.resolve([]);const d=new Date();d.setDate(d.getDate()+5);const a=`${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;d.setDate(d.getDate()+1);const b=`${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
+      return Promise.resolve([{summary:'Labour Day',start:{date:a},end:{date:b}}])},
+    themes:{darkMode:true},
+    callWS(m){
+      window.__calls.push(m.type);
+      const t=m.type;
+      if(t==='ksh_family_hub/get_info') return Promise.resolve({version:ver,modules:{...modules},hidden:[...hidden],imported:{recipes:['a','b'],shopping:[]}});
+      if(t==='ksh_family_hub/people/list')return Promise.resolve({people:JSON.parse(JSON.stringify(people)),me:q.get('me')||'p1'});
+      if(t==='ksh_family_hub/people/verify_pin'){const x=people.find(z=>z.id===m.person_id);const ok=m.pin==='1234';return Promise.resolve({ok,token:ok&&x.has_pin?'tok-'+x.id:null})}
+      if(t==='ksh_family_hub/people/users')return Promise.resolve({users:[{id:'u1',name:'Jordan Demo',is_admin:true,linked_to:(people.find(p=>p.user_id==='u1')||{}).id||null},{id:'u2',name:'Sam',is_admin:false,linked_to:(people.find(p=>p.user_id==='u2')||{}).id||null},{id:'u3',name:'Alex',is_admin:false,linked_to:(people.find(p=>p.user_id==='u3')||{}).id||null}]});
+      if(t==='ksh_family_hub/people/delete'){people=people.filter(p=>p.id!==m.person_id);return Promise.resolve({deleted:true})}
+      if(t==='ksh_family_hub/people/set_pin'){const x=people.find(z=>z.id===m.person_id);x.has_pin=!!m.pin;window.__pinset=m;return Promise.resolve({person:x,token:m.pin?'tok-'+x.id:null})}
+      if(t==='ksh_family_hub/prefs/get')return Promise.resolve(JSON.parse(JSON.stringify(prefs)));
+      if(t==='ksh_family_hub/prefs/set_order'){prefs.order=m.order;return Promise.resolve({order:m.order})}
+      if(t==='ksh_family_hub/prefs/set_access'){if(m.hidden.length)prefs.blocked[m.person_id]=m.hidden;else delete prefs.blocked[m.person_id];return Promise.resolve({blocked:prefs.blocked})}
+      if(t.startsWith('ksh_calendar/'))return calendar(t,m);
+      if(t.startsWith('ksh_finance/'))return finance(t,m);
+      if(t==='ksh_family_hub/people/add'){const p={id:'p'+(people.length+1),name:m.preferred_name||m.name,full_name:m.name,preferred_name:m.preferred_name||'',photo:m.photo||null,emoji:m.emoji,color:'#6f80f2',role:m.role,user_id:m.user_id||null,has_pin:!!m.pin,notify:m.notify};people.push(p);return Promise.resolve({person:p});}
+      if(t==='ksh_family_hub/people/update'){Object.assign(people.find(x=>x.id===m.person_id),{name:m.preferred_name||m.name,full_name:m.name,preferred_name:m.preferred_name||'',photo:m.photo||null,role:m.role,emoji:m.emoji,user_id:m.user_id||null});return Promise.resolve({});}
+      if(t.startsWith('ksh_chores/'))return chores(t,m);
+      if(t==='ksh_family_hub/households/list')return Promise.resolve({households:JSON.parse(JSON.stringify(hh))});
+      if(t==='ksh_family_hub/households/create'){const h={id:'h'+(hh.length+1),name:m.name,everyone:false,owner_id:'u1',members:['u1'],can_manage:true};hh.push(h);return Promise.resolve({household:h});}
+      if(t==='ksh_family_hub/households/add_member'){const h=hh.find(x=>x.id===m.household_id);h.members.push(m.user_id);return Promise.resolve({household:h});}
+      if(t==='ksh_family_hub/households/remove_member'){const h=hh.find(x=>x.id===m.household_id);h.members=h.members.filter(x=>x!==m.user_id);return Promise.resolve({household:h});}
+      if(t==='ksh_shopping/get_integration_settings')return Promise.resolve({country:'NZ',available_countries:{NZ:'New Zealand',AU:'Australia',GB:'United Kingdom'},custom_regions:{}});
+      if(t==='ksh_family_hub/set_modules'){window.__sets=(window.__sets||[]);window.__sets.push(JSON.stringify(m));return new Promise(r=>setTimeout(()=>{Object.assign(modules,{recipes:m.recipes??modules.recipes,shopping:m.shopping??modules.shopping,chores:m.chores??modules.chores,calendar:m.calendar??modules.calendar,finance:m.finance??modules.finance});if(m.hidden)hidden=m.hidden;r({modules:{...modules},hidden:[...hidden]});},1200));}
+      if(t.startsWith('ksh_recipes/')){
+        const c=t.slice(12);
+        if(c==='recipes/get_all')return Promise.resolve({recipes});
+        if(c==='tags/get_all')return Promise.resolve({tags:['easy']});
+        if(c==='meal_plan/get')return Promise.resolve({entries:meals});
+        if(c==='global_timers/get')return Promise.resolve({timers:[]});
+        return Promise.resolve({});
+      }
+      if(t.startsWith('ksh_shopping/')&&!modules.shopping)return Promise.reject({code:'unknown_command',message:'Unknown command'});
+      return base.callWS(m);
+    }
+  });
+  window.__hass=hass;
+  await import('./app/ksh-family-hub-card.js');   // the small loader
+  await import('./app/ksh-family-hub-app.js');    // the app (the sidebar panel uses it directly)
+  const el=document.createElement(q.get('kids')?'ksh-family-hub-kids-core':q.get('card')?'ksh-family-hub-card':'ksh-family-hub-panel');
+  el.setConfig&&el.setConfig(q.get('kids')?{person:q.get('kids'),style:q.get('style')||undefined}:{});
+  document.getElementById('wrap').appendChild(el);
+  el.hass=hass; window.__el=el;
+})();
+</script></body></html>
