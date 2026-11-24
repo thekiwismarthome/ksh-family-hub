@@ -125,9 +125,11 @@ export class KshFamilyHubCard extends LitElement {
     this._onResize = () => this._updateHeight();
     window.addEventListener('resize', this._onResize);
     window.visualViewport?.addEventListener('resize', this._onResize);
-    // A panel is sized by Home Assistant; as a dashboard card we fill the viewport ourselves
     this._isPanel = this.localName === 'ksh-family-hub-panel';
+    // Fill the screen below whatever Home Assistant puts above us. The companion app on a phone does not always give a
+    // panel a height, which left the menu at the very end of a long list; the sizes are checked again once the page settles.
     this._updateHeight();
+    this._settle = [400, 1500].map(ms => setTimeout(() => this._updateHeight(), ms));
     if (ROUTE_MODULE[this._route]) loadModule(ROUTE_MODULE[this._route]);
   }
 
@@ -139,14 +141,16 @@ export class KshFamilyHubCard extends LitElement {
     document.removeEventListener('visibilitychange', this._onVisible);
     window.removeEventListener('resize', this._onResize);
     window.visualViewport?.removeEventListener('resize', this._onResize);
+    (this._settle || []).forEach(clearTimeout);
   }
 
   _updateHeight() {
-    if (this._isPanel) return;
     requestAnimationFrame(() => requestAnimationFrame(() => {
       const top = this.getBoundingClientRect().top;
-      const available = window.innerHeight - Math.max(top, 0);
-      if (available > 200) this.style.height = `${available}px`;
+      const viewport = window.visualViewport?.height || window.innerHeight;
+      // the top is measured from the page, so a page that has scrolled still gives the right height
+      const available = Math.min(window.innerHeight, viewport) - Math.max(top, 0);
+      if (available > 200) this.style.height = `${Math.round(available)}px`;
     }));
   }
 

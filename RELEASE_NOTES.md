@@ -2,6 +2,10 @@
 
 Versions follow the date: **YEAR.MONTH.RELEASE**, with a `-betaN` suffix while in beta.
 
+## 2026.11.3
+
+- **The menu stays at the bottom of the screen on a phone.** In the Home Assistant app the Family Hub page was not always given a height, so the menu ended up after the whole recipe list. The hub now sizes itself to the screen (and again when the phone turns or the keyboard opens).
+
 ## 2026.11.2
 
 - The logo is found next to the app's own files instead of at a fixed Home Assistant path, so it also shows when Home Assistant is behind a sub-path proxy, and in the website demo.
