@@ -50,6 +50,17 @@ def _hash_pin(pin: str, salt: str) -> str:
     return hashlib.sha256(f"{salt}:{pin}".encode()).hexdigest()
 
 
+def photo_ref(photo: str | None) -> str | None:
+    """What the people list carries for a picture: None, "ha", or "h:<hash>" for a photo of their own.
+
+    The photo itself (about 10 KB) is fetched once with people/photos and kept on the device, so the list that every screen
+    reloads after every tick stays small, which matters on a phone away from home.
+    """
+    if photo and photo.startswith("data:"):
+        return "h:" + hashlib.sha1(photo.encode()).hexdigest()[:16]
+    return photo
+
+
 def display_name(p: dict) -> str:
     """The name shown everywhere: the preferred name when there is one, never the Home Assistant login's name."""
     return (p.get("preferred_name") or "").strip() or p["name"]
@@ -75,7 +86,7 @@ class PeopleStore:
     def public(p: dict) -> dict:
         return {
             "id": p["id"], "name": display_name(p), "full_name": p["name"], "preferred_name": p.get("preferred_name") or "",
-            "emoji": p.get("emoji", "🙂"), "color": p.get("color", COLOURS[0]), "photo": p.get("photo"),
+            "emoji": p.get("emoji", "🙂"), "color": p.get("color", COLOURS[0]), "photo": photo_ref(p.get("photo")),
             "role": p["role"], "user_id": p.get("user_id"), "has_pin": bool(p.get("pin_hash")),
             "notify": p.get("notify"),
         }
@@ -201,7 +212,7 @@ def is_adult(actor: dict) -> bool:
 # ---------------------------------------------------------------------------
 
 def async_register_commands(hass: HomeAssistant) -> None:
-    for command in (ws_list, ws_users, ws_add, ws_update, ws_delete, ws_verify_pin, ws_set_pin):
+    for command in (ws_list, ws_photos, ws_users, ws_add, ws_update, ws_delete, ws_verify_pin, ws_set_pin):
         websocket_api.async_register_command(hass, command)
 
 
@@ -215,6 +226,20 @@ async def ws_list(hass, connection, msg) -> None:
         "people": [ps.public(p) for p in await ps.all()],
         "me": me["id"] if me else None,
     })
+
+
+@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/people/photos", vol.Required("hashes"): [str]})
+@websocket_api.async_response
+async def ws_photos(hass, connection, msg) -> None:
+    """The photos behind the "h:<hash>" references of the people list, for the hashes the device does not have yet."""
+    want = set(msg["hashes"])
+    ps = store(hass)
+    out = {}
+    for p in await ps.all():
+        ref = photo_ref(p.get("photo"))
+        if ref and ref.startswith("h:") and ref in want:
+            out[ref] = p["photo"]
+    connection.send_result(msg["id"], {"photos": out})
 
 
 async def _require_adult(hass, connection, msg):

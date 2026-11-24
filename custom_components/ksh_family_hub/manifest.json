@@ -1,7 +1,7 @@
 {
   "domain": "ksh_family_hub",
   "name": "KSH Family Hub",
-  "version": "2026.11.1-beta10",
+  "version": "2026.11.1",
   "documentation": "https://github.com/thekiwismarthome/ksh-family-hub",
   "issue_tracker": "https://github.com/thekiwismarthome/ksh-family-hub/issues",
   "requirements": [

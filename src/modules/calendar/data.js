@@ -16,9 +16,26 @@ const sortKey = e => `${e.date}|${e.all_day ? '0' : '1'}|${e.start_time || ''}|$
  * @param acting  {id, role, ...} of the person using the calendar (to show only the chores that are theirs)
  * @returns {events, settings}  events: [{key, kind: 'event'|'chore'|'ha', date, title, emoji, color, all_day, start_time, end_time, ...}]
  */
+// The calendar settings from the last load. The chores and the Home Assistant calendars are asked for at the same moment as
+// the family events (not after them), which saves a whole round trip on a slow connection. If the settings turn out to have
+// changed, what is missing is fetched then.
+let lastSettings = null;
+
 export async function loadEvents(hass, startIso, endIso, { acting, modules, msg = {}, haPicked } = {}) {
   const out = [];
   let settings = { ha_calendars: [], show_chores: true };
+
+  const wants = cfg => ({ chores: !!(modules?.chores && cfg.show_chores), ha: haPicked || cfg.ha_calendars || [] });
+  const fetchFor = (w, skip = {}) => {
+    const jobs = [];
+    if (w.chores && !skip.chores) jobs.push(chores(hass, startIso, endIso, acting).then(r => ({ tag: 'chores', r })).catch(() => null));
+    w.ha.forEach((entity, n) => {
+      if (!skip.ha?.has(entity)) jobs.push(haEvents(hass, entity, n, startIso, endIso).then(r => ({ tag: `ha:${entity}`, r })).catch(() => null));
+    });
+    return Promise.all(jobs).then(list => list.filter(Boolean));
+  };
+
+  const early = lastSettings && !haPicked ? fetchFor(wants(lastSettings)) : null;
   if (modules?.calendar) {
     const res = await hass.callWS({ type: 'ksh_calendar/get_events', start: startIso, end: endIso, ...msg });
     settings = res.settings;
@@ -28,10 +45,18 @@ export async function loadEvents(hass, startIso, endIso, { acting, modules, msg 
         span: e.end_date ? { start: e.date, end: e.end_date } : null });
     }
   }
-  const jobs = [];
-  if (modules?.chores && settings.show_chores) jobs.push(chores(hass, startIso, endIso, acting).then(r => out.push(...r)).catch(() => {}));
-  for (const [n, entity] of (haPicked || settings.ha_calendars || []).entries()) jobs.push(haEvents(hass, entity, n, startIso, endIso).then(r => out.push(...r)).catch(() => {}));
-  await Promise.all(jobs);
+  if (!haPicked) lastSettings = settings;
+
+  const w = wants(settings);
+  let got;
+  if (early) {
+    got = (await early).filter(g => (g.tag === 'chores' ? w.chores : w.ha.includes(g.tag.slice(3))));
+    const skip = { chores: got.some(g => g.tag === 'chores'), ha: new Set(got.filter(g => g.tag !== 'chores').map(g => g.tag.slice(3))) };
+    got = got.concat(await fetchFor(w, skip));
+  } else {
+    got = await fetchFor(w);
+  }
+  for (const g of got) out.push(...g.r);
   out.sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
   return { events: out, settings };
 }

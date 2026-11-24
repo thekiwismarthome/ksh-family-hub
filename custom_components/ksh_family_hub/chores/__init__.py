@@ -51,8 +51,12 @@ async def async_setup_module(hass: HomeAssistant, version: str) -> list:
     async_register_commands(hass)
 
     async def _tick(_now) -> None:
-        await _send_reminders(hass)
-        await _settle_pocket_money(hass)
+        # each job on its own: a problem sending a reminder must not stop pocket money being paid, or the other way round
+        for job in (_send_reminders, _settle_pocket_money):
+            try:
+                await job(hass)
+            except Exception:  # noqa: BLE001
+                _LOGGER.exception("Chores: %s failed", job.__name__)
 
     return [async_track_time_interval(hass, _tick, timedelta(seconds=60))]
 

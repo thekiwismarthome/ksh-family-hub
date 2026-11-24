@@ -1,6 +1,28 @@
 # Release notes
 
-Versions now follow the date: **YEAR.MONTH.RELEASE**, with a `-betaN` suffix while in beta (the first one is 2026.11.1-beta6, after 0.1.0-beta.5).
+Versions follow the date: **YEAR.MONTH.RELEASE**, with a `-betaN` suffix while in beta.
+
+## 2026.11.1
+
+The first full release. Everything from the betas below, plus a round of speed work for using the hub away from home and a review of the whole thing.
+
+**Faster away from home**
+- Home Assistant now loads a **2 KB loader** on every page instead of the whole app. The app and each part (Shopping, Meals, Chores, Calendar, Finance) are fetched the first time they are used and kept by the browser for good, so a phone on mobile data downloads them once.
+- Files are served **pre-compressed**. The Shopping part went from 1.5 MB to 0.6 MB (product pictures as WebP; the barcode scanner, barcode drawing and backup zip load only when used), and Meals from 0.5 MB to 0.4 MB.
+- A chore or routine step now shows as done **at once** and is confirmed in the background (it used to wait for the round trip). Each action reloads once, not twice.
+- A person's own photo is sent **once** and kept on the device, instead of with every list.
+- The calendar asks for events, chores and Home Assistant calendars **at the same moment**, not one after the other.
+- The hub no longer redraws for every unrelated Home Assistant change (lights, sensors), which saves battery on a phone and on a bedside screen.
+- The logo went from 138 KB to 30 KB.
+
+**Fixes and improvements from the review**
+- "Today" is the family's today (Home Assistant's time zone), also when a phone is abroad or set to another zone. Before, a phone in another zone could show tomorrow's chores or call something late too early.
+- A problem sending a chore reminder no longer stops pocket money being paid (and the other way round).
+- The kids screen, the Calendar and Chores use the same clock, and the kids screen link (`/ksh-family-hub?kids=Mia`) works as a panel route.
+- The README, the website with a live demo and the tutorials are new: <https://thekiwismarthome.github.io/ksh-family-hub/>.
+- The integration has its own icon in Home Assistant.
+
+Upgrading: restart Home Assistant, then hard-refresh the browser (Ctrl+Shift+R). Dashboards that use `custom:ksh-family-hub-card` or `custom:ksh-family-hub-kids-card` keep working without changes.
 
 ## 2026.11.1-beta10
 

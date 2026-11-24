@@ -1,6 +1,7 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { avatar, avatarCss, faceContent } from '../../hub/avatar.js';
 import '../../hub/emoji-picker.js';
+import { loadPeople } from '../../hub/people-api.js';
 import { enableSwipeClose } from '../../hub/swipe.js';
 import { resolveActing, actingMsg, setToken } from '../../hub/actor.js';
 import { CATEGORIES, categoryById, EVENT_EMOJIS, REMIND_OPTIONS } from './categories.js';
@@ -21,7 +22,7 @@ const readChoreViews = () => {
 const FACE_KEY = 'ksh_calendar_face_side';
 const readFaceSide = () => { try { return localStorage.getItem(FACE_KEY) === 'right' ? 'right' : 'left'; } catch { return 'left'; } };
 const readPos = () => { try { return localStorage.getItem(POS_KEY) || 'right'; } catch { return 'right'; } };
-const todayIso = () => iso(new Date());
+import { todayIso } from '../../hub/clock.js';
 
 const blankEvent = (date, over = {}) => ({
   title: '', emoji: '📌', category: 'other', people: [], date, end_date: '', all_day: true, start_time: '09:00', end_time: '',
@@ -141,7 +142,7 @@ class KshCalendarModule extends LitElement {
 
   async _loadPeople() {
     try {
-      const res = await this.hass.callWS({ type: 'ksh_family_hub/people/list' });
+      const res = await loadPeople(this.hass);
       this._people = res.people;
       this._me = res.me;
       this._acting = resolveActing(this.hass, this._people, this._me);
@@ -162,7 +163,7 @@ class KshCalendarModule extends LitElement {
     const c = fromIso(this._cursor);
     if (this._view === 'week') { const m = mondayOf(c); return [iso(m), iso(addDays(m, 6))]; }
     if (this._view === 'day') return [this._cursor, this._cursor];
-    if (this._view === 'agenda') return [todayIso(), iso(addDays(new Date(), 44))];
+    if (this._view === 'agenda') return [todayIso(), iso(addDays(fromIso(todayIso()), 44))];
     const first = mondayOf(new Date(c.getFullYear(), c.getMonth(), 1));
     return [iso(first), iso(addDays(first, 41))];
   }

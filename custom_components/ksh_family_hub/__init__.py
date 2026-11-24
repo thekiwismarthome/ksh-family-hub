@@ -14,6 +14,7 @@ from homeassistant.helpers.typing import ConfigType
 import voluptuous as vol
 
 from .const import (
+    APP_FILENAME,
     CARD_FILENAME,
     DEFAULT_COUNTRY,
     DOMAIN,
@@ -225,10 +226,15 @@ async def _register_frontend(hass: HomeAssistant) -> None:
         return
     www_dir = pathlib.Path(__file__).parent / "www"
     url_base = f"/{DOMAIN}/static"
-    await hass.http.async_register_static_paths(
-        [StaticPathConfig(url_base, str(www_dir), cache_headers=False)]
-    )
+    # Languages are loaded by name, so they are always checked for a newer copy. Everything else is either asked for with
+    # ?v=<version> or has its content in its file name, so the browser may keep it for good: a phone away from home
+    # then fetches the app once, not on every visit.
+    await hass.http.async_register_static_paths([
+        StaticPathConfig(f"{url_base}/locales", str(www_dir / "locales"), cache_headers=False),
+        StaticPathConfig(url_base, str(www_dir), cache_headers=True),
+    ])
     version = hass.data[DOMAIN].get("version", "")
+    # Every page gets only the small loader; the app is fetched when a card or the panel is really used
     add_extra_js_url(hass, f"{url_base}/{CARD_FILENAME}?v={version}")
     _REGISTERED.add(DOMAIN)
 
@@ -250,7 +256,7 @@ async def _sync_panel(hass: HomeAssistant, entry: ConfigEntry) -> None:
             frontend_url_path=PANEL_URL_PATH,
             sidebar_title="Family Hub",
             sidebar_icon="mdi:home-heart",
-            module_url=f"/{DOMAIN}/static/{CARD_FILENAME}?v={version}",
+            module_url=f"/{DOMAIN}/static/{APP_FILENAME}?v={version}",
             embed_iframe=False,
             require_admin=False,
         )

@@ -7,15 +7,11 @@ import { CHORE_TEMPLATES, ROUTINE_TEMPLATES, REWARD_TEMPLATES, EMOJIS, DAY_NAMES
 import { money, parseMoney, moneyInput } from '../../hub/money.js';
 import { avatar, avatarCss } from '../../hub/avatar.js';
 import '../../hub/emoji-picker.js';
+import { loadPeople } from '../../hub/people-api.js';
 
 const ACCENT = '#3db6cc';
 
-const todayIso = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-};
-
-const todayWeekday = () => (new Date().getDay() + 6) % 7;      // Monday = 0
+import { todayIso, todayWeekday, nowHHMM } from '../../hub/clock.js';
 const WEEKDAYS = [0, 1, 2, 3, 4];
 const WEEKENDS = [5, 6];
 const sameDays = (a = [], b = []) => a.length === b.length && a.every(x => b.includes(x));
@@ -135,7 +131,7 @@ class KshChoresModule extends LitElement {
   async _load() {
     try {
       const [people, state] = await Promise.all([
-        this.hass.callWS({ type: 'ksh_family_hub/people/list' }),
+        loadPeople(this.hass),
         this.hass.callWS({ type: 'ksh_chores/get_state', date: todayIso() }),
       ]);
       this._people = people.people;
@@ -181,8 +177,15 @@ class KshChoresModule extends LitElement {
       this._say(err?.message || 'That did not work');
       return null;
     } finally {
-      this._load();
+      // one reload (the live-update event asks for the same one), never two
+      this._scheduleLoad();
     }
+  }
+
+  /** Show a change at once, before the server has answered (the reload that follows puts the truth back). */
+  _patchState(fn) {
+    if (!this._state) return;
+    this._state = fn(this._state);
   }
 
   _say(text) {
@@ -225,8 +228,7 @@ class KshChoresModule extends LitElement {
     if (!['open', 'rejected'].includes(item.status)) return false;
     if (item.date < todayIso()) return true;
     if (!chore.due_time || item.date !== todayIso()) return false;
-    const now = new Date();
-    return chore.due_time < `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    return chore.due_time < nowHHMM();
   }
 
   /** The day before an ISO date (a period's end is the first day after it), in local time */
@@ -245,6 +247,9 @@ class KshChoresModule extends LitElement {
     const chore = this._chore(item.chore_id);
     // the last thing on today's list earns the bigger celebration
     const left = this._state.items.filter(i => ['open', 'rejected'].includes(i.status) && this._chore(i.chore_id) && this._visible(this._chore(i.chore_id))).length;
+    const status = this._isAdult ? 'approved' : 'done';
+    const mark = i => (i.chore_id === item.chore_id && i.date === item.date ? { ...i, status, done_by: this._acting } : i);
+    this._patchState(s => ({ ...s, items: s.items.map(mark), overdue: (s.overdue || []).filter(i => !(i.chore_id === item.chore_id && i.date === item.date)) }));
     const res = await this._call('complete', { chore_id: item.chore_id, date: item.date });
     if (res) celebrate(this, res.celebration, { big: left <= 1 });
     if (res?.awarded) this._say(`+${chore.points} ★  ${chore.name}`);
@@ -313,8 +318,8 @@ class KshChoresModule extends LitElement {
     const start = d.start || todayIso();
     if (rec.type === 'once') rec.date = start;
     if (rec.type === 'custom') rec.start = start;
-    if (rec.type === 'weekly' && !(rec.days || []).length) rec.days = [((new Date().getDay() + 6) % 7)];
-    if (rec.type === 'custom' && rec.unit === 'week' && !(rec.days || []).length) rec.days = [((new Date().getDay() + 6) % 7)];
+    if (rec.type === 'weekly' && !(rec.days || []).length) rec.days = [todayWeekday()];
+    if (rec.type === 'custom' && rec.unit === 'week' && !(rec.days || []).length) rec.days = [todayWeekday()];
     const fields = {
       name: d.name.trim(), emoji: d.emoji, points: Number(d.points) || 0, assignees: d.assignees, recurrence: rec, start,
       due_time: d.due_time || null, remind: !!d.remind && !!d.due_time, requires_approval: !!d.requires_approval, notes: d.notes || '',
@@ -377,6 +382,12 @@ class KshChoresModule extends LitElement {
   _run(routineId, personId = this._meId) { return this._state.runs[`${routineId}:${personId}`] || { steps: [], completed: false }; }
 
   async _toggleStep(routine, stepId, done, personId = this._meId) {
+    const key = `${routine.id}:${personId}`;
+    this._patchState(s => {
+      const run = s.runs[key] || { steps: [], completed: false };
+      const steps = done ? [...new Set([...run.steps, stepId])] : run.steps.filter(x => x !== stepId);
+      return { ...s, runs: { ...s.runs, [key]: { ...run, steps } } };
+    });
     // An adult ticking for a child sends whose routine it is; the progress and the points are the child's
     const res = await this._call('routines/step', { routine_id: routine.id, step_id: stepId, done, ...(personId !== this._meId ? { for_person: personId } : {}) });
     if (res?.awarded) { this._sheet = { type: 'celebrate', routine }; celebrate(this, res.celebration, { big: true }); }

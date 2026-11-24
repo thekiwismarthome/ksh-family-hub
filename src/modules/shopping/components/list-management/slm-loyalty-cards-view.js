@@ -2,9 +2,6 @@ import { t, I18nController } from '../../services/translator.js';
 import { SheetSwipe } from '../../services/sheet-swipe.js';
 import { LitElement, html, css } from 'lit';
 import { fontInherit } from '../../styles/ui-styles.js';
-import JsBarcode from 'jsbarcode';
-import { Html5Qrcode } from 'html5-qrcode';
-import qrcode from 'qrcode-generator';
 import { viewHeaderStyles, bottomSheetStyles } from '../../styles/ui-styles.js';
 import './slm-visibility-picker.js';
 import { visibilityToApi, defaultVisibility } from './slm-visibility-picker.js';
@@ -82,7 +79,7 @@ class SLMLoyaltyCardsView extends LitElement {
     this._loadedForUserId = null;
   }
 
-  updated(changedProps) {
+  async updated(changedProps) {
     if ((changedProps.has('userId') || changedProps.has('api')) && this.userId && this.api) {
       if (this.userId !== this._loadedForUserId) {
         this._loadedForUserId = this.userId;
@@ -97,6 +94,7 @@ class SLMLoyaltyCardsView extends LitElement {
         const canvas = this.shadowRoot.getElementById('qrcode-canvas');
         if (canvas) {
           try {
+            const { default: qrcode } = await import('qrcode-generator');   // loaded only when a card is shown
             const qr = qrcode(0, 'L');
             qr.addData(this.fullscreenCard.barcode);
             qr.make();
@@ -113,6 +111,7 @@ class SLMLoyaltyCardsView extends LitElement {
         const svg = this.shadowRoot.getElementById('barcode-svg');
         if (svg) {
           try {
+            const { default: JsBarcode } = await import('jsbarcode');
             JsBarcode(svg, this.fullscreenCard.barcode, {
               format: 'CODE128',
               width: 2,
@@ -202,6 +201,7 @@ class SLMLoyaltyCardsView extends LitElement {
     host.append(label, scanRegion, cancelBtn);
     document.body.appendChild(host);
 
+    const { Html5Qrcode } = await import('html5-qrcode');   // loaded only when someone scans
     this._scannerInstance = new Html5Qrcode('slm-scanner-region');
     this._scannerInstance.start(
       { facingMode: 'environment' },

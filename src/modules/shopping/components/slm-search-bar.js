@@ -1,7 +1,6 @@
 import { LitElement, html, css } from 'lit';
 import { fontInherit } from '../styles/ui-styles.js';
 import { t, I18nController } from '../services/translator.js';
-import { Html5Qrcode } from 'html5-qrcode';
 
 const UNITS = ['units', 'kg', 'g', 'L', 'mL', 'pack', 'loaf', 'dozen', 'ea', 'pkt', 'tray', 'bottle', 'can', 'bunch', 'roll', 'bar'];
 
@@ -253,6 +252,7 @@ class SLMSearchBar extends LitElement {
     host.append(label, scanRegion, btnRow);
     document.body.appendChild(host);
 
+    const { Html5Qrcode } = await import('html5-qrcode');   // loaded only when someone scans
     this._scannerInstance = new Html5Qrcode('slm-product-scanner-region');
     this._scannerInstance.start(
       { facingMode: this._facingMode },

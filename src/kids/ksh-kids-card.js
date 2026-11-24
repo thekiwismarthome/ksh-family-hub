@@ -12,10 +12,10 @@ import { LitElement, html, css, nothing } from 'lit';
 import { celebrate, DEFAULT_CELEBRATION } from '../hub/celebrate.js';
 import { avatar, avatarCss } from '../hub/avatar.js';
 import { money } from '../hub/money.js';
+import { hassMatters } from '../hub/hass-util.js';
+import { loadPeople } from '../hub/people-api.js';
 
-const pad = n => String(n).padStart(2, '0');
-const isoOf = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-const weekday = () => (new Date().getDay() + 6) % 7;     // Monday = 0, like the backend
+import { setTimeZone, todayIso, todayWeekday as weekday } from '../hub/clock.js';
 const TOKEN_KEY = id => `ksh_kids_token_${id}`;
 const readToken = id => { try { return localStorage.getItem(TOKEN_KEY(id)) || null; } catch { return null; } };
 const saveToken = (id, t) => { try { if (t) localStorage.setItem(TOKEN_KEY(id), t); else localStorage.removeItem(TOKEN_KEY(id)); } catch { /* ignore */ } };
@@ -53,7 +53,7 @@ class KshKidsCard extends LitElement {
     this._error = null;
     this._toast = null;
     this._busy = false;
-    this._day = isoOf(new Date());
+    this._day = todayIso();
   }
 
   static getStubConfig() { return { person: '' }; }
@@ -70,7 +70,7 @@ class KshKidsCard extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     this._tick = setInterval(() => {
-      const today = isoOf(new Date());
+      const today = todayIso();
       if (today !== this._day) { this._day = today; this._load(); }
       this.requestUpdate();           // the greeting follows the time of day
     }, 60000);
@@ -85,7 +85,14 @@ class KshKidsCard extends LitElement {
     this._started = false;
   }
 
+  // A bedside screen is on all day: do not redraw for every unrelated Home Assistant change (see hub/hass-util.js)
+  shouldUpdate(changed) {
+    if (changed.size === 1 && changed.has('hass') && this._started) return hassMatters(changed.get('hass'), this.hass, (this._hassMemo ||= {}));
+    return true;
+  }
+
   updated(changed) {
+    if (changed.has('hass') && this.hass) { setTimeZone(this.hass.config?.time_zone); if (!this._started) this._day = todayIso(); }
     if (changed.has('hass') && this.hass && !this._started) { this._started = true; this._start(); }
   }
 
@@ -102,7 +109,7 @@ class KshKidsCard extends LitElement {
   async _load() {
     try {
       const [people, state] = await Promise.all([
-        this.hass.callWS({ type: 'ksh_family_hub/people/list' }),
+        loadPeople(this.hass),
         this.hass.callWS({ type: 'ksh_chores/get_state', date: this._day }),
       ]);
       this._people = people.people;
@@ -135,7 +142,9 @@ class KshKidsCard extends LitElement {
       this._say(err?.code === 'unauthorized' ? 'This screen is not allowed to do that' : (err?.message || 'That did not work'));
       return null;
     } finally {
-      this._load();
+      // one reload (the live-update event asks for the same one), never two
+      clearTimeout(this._debounce);
+      this._debounce = setTimeout(() => this._load(), 250);
     }
   }
 
@@ -195,6 +204,9 @@ class KshKidsCard extends LitElement {
     if (this._busy) return;
     this._busy = true;
     const left = this._chores.todo.length;
+    // show it at once; the reload that follows puts the truth back
+    const mark = i => (i.chore_id === item.chore_id && i.date === item.date ? { ...i, status: 'done', done_by: this._me.id } : i);
+    this._state = { ...this._state, items: this._state.items.map(mark), overdue: (this._state.overdue || []).filter(i => !(i.chore_id === item.chore_id && i.date === item.date)) };
     const res = await this._call('complete', { chore_id: item.chore_id, date: item.date });
     this._busy = false;
     if (!res) return;
@@ -207,6 +219,10 @@ class KshKidsCard extends LitElement {
   }
 
   async _step(r, stepId, done) {
+    const key = `${r.id}:${this._me.id}`;
+    const run = this._state.runs?.[key] || { steps: [], completed: false };
+    const steps = done ? [...new Set([...run.steps, stepId])] : run.steps.filter(x => x !== stepId);
+    this._state = { ...this._state, runs: { ...this._state.runs, [key]: { ...run, steps } } };
     const res = await this._call('routines/step', { routine_id: r.id, step_id: stepId, done });
     if (res?.awarded) {
       celebrate(this, res.celebration || DEFAULT_CELEBRATION, { big: true });
@@ -511,15 +527,5 @@ class KshKidsCard extends LitElement {
   `];
 }
 
-if (!customElements.get('ksh-family-hub-kids-card')) customElements.define('ksh-family-hub-kids-card', KshKidsCard);
-
-window.customCards = window.customCards || [];
-if (!window.customCards.some(c => c.type === 'ksh-family-hub-kids-card')) {
-  window.customCards.push({
-    type: 'ksh-family-hub-kids-card',
-    name: 'KSH Family Hub: Kids view',
-    description: 'A big, colourful chores, routines and points screen for one child, made for a bedside display.',
-    preview: false,
-    documentationURL: 'https://github.com/thekiwismarthome/ksh-family-hub',
-  });
-}
+// The dashboard card <ksh-family-hub-kids-card> is a small shell (src/loader.js) around this element
+if (!customElements.get('ksh-family-hub-kids-core')) customElements.define('ksh-family-hub-kids-core', KshKidsCard);

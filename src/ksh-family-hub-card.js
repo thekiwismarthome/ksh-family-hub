@@ -5,16 +5,31 @@ import { enableSwipeClose } from './hub/swipe.js';
 import { SUB_TABS, visibleItems, orderItems, itemById, BAR_SLOTS } from './hub/modules.js';
 import { resolveActing, ACTING_EVENT } from './hub/actor.js';
 import { hubTokens, themeId } from './hub/hub-styles.js';
+import { hassMatters } from './hub/hass-util.js';
+import { loadPeople } from './hub/people-api.js';
+import { setTimeZone } from './hub/clock.js';
 import './hub/ksh-hub-home.js';
 import './hub/ksh-hub-settings.js';
 import './hub/ksh-hub-placeholder.js';
 import './hub/ksh-hub-sheets.js';
-import './modules/recipes/recipe-manager-card.js';    // <ksh-recipes-module>
-import './modules/shopping/shopping-list-manager-card.js'; // <ksh-shopping-module>
-import './modules/chores/ksh-chores-module.js';           // <ksh-chores-module>
-import './modules/calendar/ksh-calendar-module.js';       // <ksh-calendar-module>
-import './modules/finance/ksh-finance-module.js';         // <ksh-finance-module>
-import './kids/ksh-kids-card.js';                      // <ksh-family-hub-kids-card>, the kids' screen
+import './kids/ksh-kids-card.js';                      // <ksh-family-hub-kids-core>, the kids' screen
+
+// Each part of the hub is its own file that loads the first time it is opened, so opening the hub is quick on a slow link.
+// The files are cached by the browser (their names change with their content).
+const MODULE_LOADERS = {
+  shopping: () => import('./modules/shopping/shopping-list-manager-card.js'),    // <ksh-shopping-module>
+  recipes: () => import('./modules/recipes/recipe-manager-card.js'),             // <ksh-recipes-module>
+  chores: () => import('./modules/chores/ksh-chores-module.js'),                 // <ksh-chores-module>
+  calendar: () => import('./modules/calendar/ksh-calendar-module.js'),           // <ksh-calendar-module>
+  finance: () => import('./modules/finance/ksh-finance-module.js'),              // <ksh-finance-module>
+};
+const ROUTE_MODULE = { shopping: 'shopping', cards: 'shopping', meals: 'recipes', chores: 'chores', calendar: 'calendar', finance: 'finance' };
+const loaded = new Map();
+function loadModule(key) {
+  if (!MODULE_LOADERS[key]) return Promise.resolve();
+  if (!loaded.has(key)) loaded.set(key, MODULE_LOADERS[key]().catch(err => { loaded.delete(key); console.warn('KSH Family Hub: could not load', key, err); }));
+  return loaded.get(key);
+}
 
 const ROUTE_KEY = 'ksh_hub_route';
 const THEME_KEY = 'ksh_hub_theme';
@@ -112,6 +127,7 @@ export class KshFamilyHubCard extends LitElement {
     // A panel is sized by Home Assistant; as a dashboard card we fill the viewport ourselves
     this._isPanel = this.localName === 'ksh-family-hub-panel';
     this._updateHeight();
+    if (ROUTE_MODULE[this._route]) loadModule(ROUTE_MODULE[this._route]);
   }
 
   disconnectedCallback() {
@@ -133,7 +149,16 @@ export class KshFamilyHubCard extends LitElement {
     }));
   }
 
+  // Ignore the constant stream of unrelated Home Assistant changes: see hub/hass-util.js
+  shouldUpdate(changed) {
+    if (changed.size === 1 && changed.has('hass') && this._infoRequested) {
+      return hassMatters(changed.get('hass'), this.hass, (this._hassMemo ||= {}));
+    }
+    return true;
+  }
+
   willUpdate(changed) {
+    if (changed.has('hass') && this.hass) setTimeZone(this.hass.config?.time_zone);
     if (changed.has('hass') && this.hass && !this._infoRequested) {
       this._infoRequested = true;
       this._loadInfo();
@@ -142,12 +167,24 @@ export class KshFamilyHubCard extends LitElement {
     }
   }
 
+  // Once the hub is showing, quietly fetch the small parts so they open at once. Not on a slow or metered connection
+  // (data saver, 2G/3G), and never the two big ones (Shopping, Meals): those load when they are opened.
+  _prefetchModules() {
+    const net = navigator.connection;
+    if (net && (net.saveData || /(^|-)[23]g$/.test(net.effectiveType || ''))) return;
+    const idle = window.requestIdleCallback || (fn => setTimeout(fn, 1500));
+    idle(async () => {
+      for (const key of ['chores', 'calendar', 'finance']) if (this._info?.modules?.[key]) await loadModule(key);
+    });
+  }
+
   updated(changed) {
     const more = this.renderRoot.querySelector('.sheet');
     if (more && !more._swipe) { more._swipe = true; enableSwipeClose(more, () => { this._moreOpen = false; }); }
     if (changed.has('_theme') || changed.has('hass')) this._applyMode();
     if (changed.has('_palette')) this.setAttribute('data-theme', this._palette);
     if (changed.has('_route') || changed.has('_gen') || changed.has('_info')) this._syncShoppingView();
+    if (changed.has('_info') && this._info && !this._prefetched) { this._prefetched = true; this._prefetchModules(); }
   }
 
   // Cards (loyalty cards) is its own menu entry but lives inside the shopping module
@@ -179,7 +216,7 @@ export class KshFamilyHubCard extends LitElement {
     try {
       const [prefs, people] = await Promise.all([
         this.hass.callWS({ type: 'ksh_family_hub/prefs/get' }),
-        this.hass.callWS({ type: 'ksh_family_hub/people/list' }),
+        loadPeople(this.hass),
       ]);
       this._prefs = { order: prefs.order || [], blocked: prefs.blocked || {} };
       this._people = people.people;
@@ -282,6 +319,7 @@ export class KshFamilyHubCard extends LitElement {
   }
 
   _setRoute(id) {
+    if (ROUTE_MODULE[id]) loadModule(ROUTE_MODULE[id]);
     if (id === 'settings') { this._route = 'settings'; this._moreOpen = false; return; }
     this._route = id;
     this._moreOpen = false;
@@ -747,7 +785,7 @@ class KshFamilyHubPanel extends KshFamilyHubCard {
     if (!kid) return super.render();
     if (!this._kidsEl || this._kidsFor !== kid) {
       this._kidsFor = kid;
-      this._kidsEl = document.createElement('ksh-family-hub-kids-card');
+      this._kidsEl = document.createElement('ksh-family-hub-kids-core');
       this._kidsEl.setConfig({ person: kid, style: params.get('style') || undefined, height: '100dvh' });
     }
     this._kidsEl.hass = this.hass;
@@ -755,16 +793,7 @@ class KshFamilyHubPanel extends KshFamilyHubCard {
   }
 }
 
-if (!customElements.get('ksh-family-hub-card')) customElements.define('ksh-family-hub-card', KshFamilyHubCard);
+// The dashboard card is a small shell (src/loader.js) that loads this file and puts <ksh-family-hub-core> inside itself.
+// The sidebar panel loads this file directly.
+if (!customElements.get('ksh-family-hub-core')) customElements.define('ksh-family-hub-core', KshFamilyHubCard);
 if (!customElements.get('ksh-family-hub-panel')) customElements.define('ksh-family-hub-panel', KshFamilyHubPanel);
-
-window.customCards = window.customCards || [];
-if (!window.customCards.some(c => c.type === 'ksh-family-hub-card')) {
-  window.customCards.push({
-    type: 'ksh-family-hub-card',
-    name: 'KSH Family Hub',
-    description: 'Recipes, meal planner and shopping lists in one app.',
-    preview: false,
-    documentationURL: 'https://github.com/thekiwismarthome/ksh-family-hub',
-  });
-}

@@ -1,6 +1,7 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { avatar, avatarCss, faceContent } from '../../hub/avatar.js';
 import '../../hub/emoji-picker.js';
+import { loadPeople } from '../../hub/people-api.js';
 import { enableSwipeClose } from '../../hub/swipe.js';
 import { resolveActing, actingMsg, setToken } from '../../hub/actor.js';
 import { money, parseMoney, moneyInput } from '../../hub/money.js';
@@ -87,7 +88,7 @@ class KshFinanceModule extends LitElement {
 
   async _load() {
     try {
-      const people = await this.hass.callWS({ type: 'ksh_family_hub/people/list' });
+      const people = await loadPeople(this.hass);
       this._people = people.people;
       this._me = people.me;
       this._acting = resolveActing(this.hass, this._people, this._me);

@@ -1060,7 +1060,6 @@ class ShoppingListManagerCard extends LitElement {
       );
 
       this._unsubscribers = [unsubscribe];
-      console.log('[SLM] ✅ Subscribed to shopping list updates');
 
     } catch (err) {
       console.error('[SLM] ❌ Failed to subscribe:', err);

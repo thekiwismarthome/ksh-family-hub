@@ -1,7 +1,9 @@
 import resolve from '@rollup/plugin-node-resolve';
 import terser from '@rollup/plugin-terser';
 import commonjs from '@rollup/plugin-commonjs';
-import { readFileSync, rmSync } from 'fs';
+import { readFileSync, rmSync, readdirSync, statSync, writeFileSync } from 'fs';
+import { gzipSync, brotliCompressSync, constants } from 'zlib';
+import { join } from 'path';
 
 const { version } = JSON.parse(readFileSync('./package.json', 'utf-8'));
 const OUT = 'custom_components/ksh_family_hub/www';
@@ -31,12 +33,29 @@ function copyAssets() {
   };
 }
 
+// Home Assistant serves a file.js.gz / file.js.br next to file.js when the browser accepts it, so a phone on a slow
+// connection downloads about a quarter of the size.
+function precompress() {
+  const walk = dir => readdirSync(dir).flatMap(f => (statSync(join(dir, f)).isDirectory() ? walk(join(dir, f)) : [join(dir, f)]));
+  return {
+    name: 'precompress',
+    writeBundle() {
+      for (const file of walk(OUT).filter(f => f.endsWith('.js'))) {
+        const data = readFileSync(file);
+        writeFileSync(`${file}.gz`, gzipSync(data, { level: 9 }));
+        writeFileSync(`${file}.br`, brotliCompressSync(data, { params: { [constants.BROTLI_PARAM_QUALITY]: 11, [constants.BROTLI_PARAM_SIZE_HINT]: data.length } }));
+      }
+    },
+  };
+}
+
 function clean() {
   return { name: 'clean', buildStart() { rmSync(OUT, { recursive: true, force: true }); } };
 }
 
 export default {
-  input: { 'ksh-family-hub-card': 'src/ksh-family-hub-card.js', ...locales },
+  // ksh-family-hub-card.js is the small loader Home Assistant puts on every page; ksh-family-hub-app.js is the app itself
+  input: { 'ksh-family-hub-card': 'src/loader.js', 'ksh-family-hub-app': 'src/ksh-family-hub-card.js', ...locales },
   output: {
     dir: OUT,
     format: 'es',
@@ -50,5 +69,6 @@ export default {
     resolve({ browser: true, preferBuiltins: false }),
     commonjs(),
     terser({ ecma: 2021, module: true }),
+    precompress(),
   ],
 };

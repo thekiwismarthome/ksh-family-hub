@@ -1,7 +1,6 @@
 import { LitElement, html, css } from 'lit';
 import { t, I18nController } from '../services/translator.js';
 import { SheetSwipe } from '../services/sheet-swipe.js';
-import { Html5Qrcode } from 'html5-qrcode';
 
 const UNITS_METRIC   = ['units', 'kg', 'g', 'L', 'mL', 'pack', 'bunch', 'dozen', 'bottle', 'can', 'bag', 'box', 'loaf', 'slice'];
 const UNITS_IMPERIAL = ['oz', 'lb', 'fl oz', 'pt', 'qt', 'gal'];
@@ -245,6 +244,7 @@ class SLMEditItemDialog extends LitElement {
     host.append(label, scanRegion, btnRow);
     document.body.appendChild(host);
 
+    const { Html5Qrcode } = await import('html5-qrcode');   // loaded only when someone scans
     this._scannerInstance = new Html5Qrcode('slm-edit-scanner-region');
     this._scannerInstance.start(
       { facingMode: this._facingMode },

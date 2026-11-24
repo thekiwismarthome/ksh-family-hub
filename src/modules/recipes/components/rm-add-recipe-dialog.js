@@ -3,7 +3,6 @@
  */
 import { LitElement, html, css } from 'lit';
 import { msg, str, updateWhenLocaleChanges } from '@lit/localize';
-import JSZip from 'jszip';
 
 class RmAddRecipeDialog extends LitElement {
   static properties = {
@@ -136,6 +135,7 @@ class RmAddRecipeDialog extends LitElement {
     try {
       let zip;
       try {
+        const { default: JSZip } = await import('jszip');   // loaded only when importing
         zip = await JSZip.loadAsync(this._importFile);
       } catch (zipErr) {
         throw new Error(msg(str`Could not open ZIP file: ${zipErr.message}`));
@@ -148,10 +148,8 @@ class RmAddRecipeDialog extends LitElement {
         throw new Error(msg('No HTML file found inside the ZIP — is this a valid Recipe Keeper export?'));
       }
       const htmlContent = await htmlEntry.async('text');
-      console.log(`[Recipe Keeper Import] HTML extracted (${htmlContent.length} chars), sending to backend`);
 
       const result = await this.api.importRecipeKeeper(htmlContent);
-      console.log(`[Recipe Keeper Import] Phase 1 done: ${result.imported} imported, ${result.failed} failed, ${result.recipe_images?.length ?? 0} need images`);
 
       let imagesSaved = 0;
       let imagesFailed = 0;
@@ -177,7 +175,6 @@ class RmAddRecipeDialog extends LitElement {
             imagesFailed++;
           }
         }
-        console.log(`[Recipe Keeper Import] Phase 2 done: ${imagesSaved} images saved, ${imagesFailed} failed`);
       }
 
       this._importResult = { ...result, imagesSaved };

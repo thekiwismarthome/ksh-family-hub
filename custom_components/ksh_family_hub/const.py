@@ -19,6 +19,7 @@ MODULE_OPTIONS = {
 DEFAULT_COUNTRY = "NZ"
 
 CARD_FILENAME = "ksh-family-hub-card.js"
+APP_FILENAME = "ksh-family-hub-app.js"   # the app itself; CARD_FILENAME is the small loader every page gets
 
 # Menu entries (other than Home) that an administrator has switched off in the hub settings
 OPTION_HIDDEN_ITEMS = "items_off"

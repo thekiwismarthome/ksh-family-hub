@@ -4,6 +4,7 @@ import { getActing, actingMsg, resolveActing } from './actor.js';
 import { EMOJIS } from '../modules/chores/templates.js';
 import { avatar, avatarCss, haPicture, shrinkImage } from './avatar.js';
 import './emoji-picker.js';
+import { loadPeople } from './people-api.js';
 
 const LANGUAGES = [
   ['en', 'English'], ['es', 'Español'], ['fr', 'Français'], ['de', 'Deutsch'],
@@ -164,7 +165,7 @@ class KshHubSheets extends LitElement {
 
   async _loadPeople() {
     try {
-      const res = await this.hass.callWS({ type: 'ksh_family_hub/people/list' });
+      const res = await loadPeople(this.hass);
       this._people = res.people;
       this._me = res.me;
     } catch (err) { this._error = err?.message || 'Could not load people'; }
@@ -187,7 +188,7 @@ class KshHubSheets extends LitElement {
   _startPerson(p) {
     this._edit = p ? p.id : 'new';
     this._form = p
-      ? { name: p.full_name || p.name, preferred: p.preferred_name || '', photo: p.photo || null, role: p.role, emoji: p.emoji, pin: '', clearPin: false, notify: p.notify || '', user_id: p.user_id || '' }
+      ? { name: p.full_name || p.name, preferred: p.preferred_name || '', photo: p.photo || null, photoOrig: p.photo || null, role: p.role, emoji: p.emoji, pin: '', clearPin: false, notify: p.notify || '', user_id: p.user_id || '' }
       : { name: '', preferred: '', photo: null, role: 'child', emoji: '🙂', pin: '', clearPin: false, notify: '', user_id: '' };
     this._error = null;
   }
@@ -198,7 +199,9 @@ class KshHubSheets extends LitElement {
     if (f.pin && !/^\d{4}$/.test(f.pin)) { this._error = 'A PIN is four digits'; return; }
     const acting = resolveActing(this.hass, this._people, this._me);
     const base = {
-      name: f.name.trim(), preferred_name: f.preferred.trim() || null, photo: f.photo || null, role: f.role, emoji: f.emoji || '🙂',
+      name: f.name.trim(), preferred_name: f.preferred.trim() || null, role: f.role, emoji: f.emoji || '🙂',
+      // the photo (about 10 KB) is only sent when it is new or changed
+      ...(this._edit === 'new' ? (f.photo ? { photo: f.photo } : {}) : (f.photo !== f.photoOrig ? { photo: f.photo || null } : {})),
       notify: f.notify.trim() || null, user_id: f.user_id || null, ...actingMsg(this.hass, acting),
     };
     let res;
