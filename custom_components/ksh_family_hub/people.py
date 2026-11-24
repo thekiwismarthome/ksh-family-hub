@@ -1,7 +1,8 @@
 """People: the members of the family, with or without a Home Assistant login.
 
-Each Home Assistant user gets a profile automatically. Children, grandparents and guests who have no login are
-added by an adult. A person has a role (adult, child or guest), an emoji and colour, an optional PIN that guards
+People are added by an adult (or a Home Assistant administrator), never created for you: a Home Assistant login does
+not become a family member until someone adds it. A person can be linked to a login (so that login is always them) or
+have none, like a child, a grandparent or a guest. A person has a role (adult, child or guest), an emoji and colour, an optional PIN that guards
 switching to their profile on a shared device, and an optional notify service for reminders.
 
 Roles: adults manage things and approve; children do things; guests only see what is assigned to them.
@@ -56,32 +57,11 @@ class PeopleStore:
         if self._people is None:
             data = await self._store.async_load() or {}
             self._people = list(data.get("people", []))
-        await self._sync_users()
         return self._people
 
     async def _save(self) -> None:
         await self._store.async_save({"people": self._people})
         self._hass.bus.async_fire(EVENT_PEOPLE_UPDATED, {})
-
-    async def _sync_users(self) -> None:
-        """Every active Home Assistant user has a profile."""
-        users = await self._hass.auth.async_get_users()
-        known = {p.get("user_id") for p in self._people if p.get("user_id")}
-        added = False
-        for user in users:
-            if user.id in known or not user.is_active or user.system_generated:
-                continue
-            self._people.append({
-                "id": uuid.uuid4().hex, "name": (user.name or "Member")[:40], "emoji": "🙂",
-                "color": COLOURS[len(self._people) % len(COLOURS)],
-                # Administrators start as adults. Everyone else starts as a child until an adult says otherwise,
-                # so nobody can approve their own chores by accident.
-                "role": "adult" if user.is_admin else "child",
-                "user_id": user.id, "pin_salt": None, "pin_hash": None, "notify": None, "created_at": _now(),
-            })
-            added = True
-        if added:
-            await self._save()
 
     @staticmethod
     def public(p: dict) -> dict:
@@ -102,11 +82,11 @@ class PeopleStore:
     async def by_user(self, user_id: str) -> dict | None:
         return next((p for p in await self.load() if p.get("user_id") == user_id), None)
 
-    async def add(self, name: str, role: str, emoji: str, pin: str | None, notify: str | None) -> dict:
+    async def add(self, name: str, role: str, emoji: str, pin: str | None, notify: str | None, user_id: str | None = None) -> dict:
         people = await self.load()
         person = {
             "id": uuid.uuid4().hex, "name": name.strip(), "emoji": emoji or "🙂", "color": COLOURS[len(people) % len(COLOURS)],
-            "role": role, "user_id": None, "pin_salt": None, "pin_hash": None, "notify": notify or None, "created_at": _now(),
+            "role": role, "user_id": user_id or None, "pin_salt": None, "pin_hash": None, "notify": notify or None, "created_at": _now(),
         }
         self.set_pin(person, pin)
         people.append(person)
@@ -211,7 +191,7 @@ def is_adult(actor: dict) -> bool:
 # ---------------------------------------------------------------------------
 
 def async_register_commands(hass: HomeAssistant) -> None:
-    for command in (ws_list, ws_add, ws_update, ws_delete, ws_verify_pin, ws_set_pin):
+    for command in (ws_list, ws_users, ws_add, ws_update, ws_delete, ws_verify_pin, ws_set_pin):
         websocket_api.async_register_command(hass, command)
 
 
@@ -239,6 +219,34 @@ async def _require_adult(hass, connection, msg):
     return actor
 
 
+async def _check_login(hass, ps, user_id: str | None, person_id: str | None = None) -> str | None:
+    """Why a Home Assistant login cannot be linked to this person, or None when it can."""
+    if not user_id:
+        return None
+    user = await hass.auth.async_get_user(user_id)
+    if user is None or not user.is_active or user.system_generated:
+        return "That Home Assistant login does not exist"
+    other = await ps.by_user(user_id)
+    if other is not None and other["id"] != person_id:
+        return f"That login is already {other['name']}"
+    return None
+
+
+@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/people/users", **AS})
+@websocket_api.async_response
+async def ws_users(hass, connection, msg) -> None:
+    """The Home Assistant logins an adult can link to a person, and who each is linked to already."""
+    if await _require_adult(hass, connection, msg) is None:
+        return
+    ps = store(hass)
+    people = await ps.all()
+    linked = {p["user_id"]: p for p in people if p.get("user_id")}
+    users = [u for u in await hass.auth.async_get_users() if u.is_active and not u.system_generated]
+    connection.send_result(msg["id"], {"users": [
+        {"id": u.id, "name": u.name or "Unnamed", "is_admin": u.is_admin,
+         "linked_to": linked[u.id]["id"] if u.id in linked else None} for u in users]})
+
+
 @websocket_api.websocket_command({
     vol.Required("type"): f"{DOMAIN}/people/add",
     **AS,
@@ -247,6 +255,7 @@ async def _require_adult(hass, connection, msg):
     vol.Optional("emoji", default="🙂"): vol.All(str, vol.Length(max=8)),
     vol.Optional("pin"): vol.Any(None, vol.All(str, vol.Match(r"^\d{4}$"))),
     vol.Optional("notify"): vol.Any(None, vol.All(str, vol.Match(r"^notify\.[a-z0-9_]+$"))),
+    vol.Optional("user_id"): vol.Any(None, str),
 })
 @websocket_api.async_response
 async def ws_add(hass, connection, msg) -> None:
@@ -256,7 +265,11 @@ async def ws_add(hass, connection, msg) -> None:
         connection.send_error(msg["id"], "invalid_format", "Give them a name")
         return
     ps = store(hass)
-    person = await ps.add(msg["name"], msg["role"], msg["emoji"], msg.get("pin"), msg.get("notify"))
+    problem = await _check_login(hass, ps, msg.get("user_id"))
+    if problem:
+        connection.send_error(msg["id"], "invalid_format", problem)
+        return
+    person = await ps.add(msg["name"], msg.get("role", "child"), msg.get("emoji", "🙂"), msg.get("pin"), msg.get("notify"), msg.get("user_id"))
     connection.send_result(msg["id"], {"person": ps.public(person)})
 
 
@@ -269,6 +282,7 @@ async def ws_add(hass, connection, msg) -> None:
     vol.Optional("emoji"): vol.All(str, vol.Length(max=8)),
     vol.Optional("pin"): vol.Any(None, vol.All(str, vol.Match(r"^\d{4}$"))),
     vol.Optional("notify"): vol.Any(None, vol.All(str, vol.Match(r"^notify\.[a-z0-9_]+$"))),
+    vol.Optional("user_id"): vol.Any(None, str),
 })
 @websocket_api.async_response
 async def ws_update(hass, connection, msg) -> None:
@@ -285,6 +299,12 @@ async def ws_update(hass, connection, msg) -> None:
         if not adults:
             connection.send_error(msg["id"], "invalid_format", "There has to be at least one adult")
             return
+    if "user_id" in msg:
+        problem = await _check_login(hass, ps, msg["user_id"], person["id"])
+        if problem:
+            connection.send_error(msg["id"], "invalid_format", problem)
+            return
+        person["user_id"] = msg["user_id"] or None
     for key in ("name", "role", "emoji", "notify"):
         if key in msg:
             person[key] = msg[key].strip() if isinstance(msg[key], str) else msg[key]
@@ -308,10 +328,11 @@ async def ws_delete(hass, connection, msg) -> None:
     if person is None:
         connection.send_error(msg["id"], "not_found", "Person not found")
         return
-    if person.get("user_id"):
-        connection.send_error(msg["id"], "invalid_format",
-                              "This person has a Home Assistant login. Remove the user in Home Assistant instead.")
-        return
+    if person["role"] == "adult" and not connection.user.is_admin:
+        others = [p for p in await ps.all() if p["role"] == "adult" and p["id"] != person["id"]]
+        if not others:
+            connection.send_error(msg["id"], "invalid_format", "There has to be at least one adult")
+            return
     await ps.remove(person)
     connection.send_result(msg["id"], {"deleted": True})
 

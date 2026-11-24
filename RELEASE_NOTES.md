@@ -1,5 +1,11 @@
 # Release notes
 
+Versions now follow the date: **YEAR.MONTH.RELEASE**, with a `-betaN` suffix while in beta (this one is 2026.11.1-beta6, after 0.1.0-beta.5).
+
+## 2026.11.1-beta6
+
+- **People are no longer created from Home Assistant logins.** An adult (or a Home Assistant administrator) adds each person under People & guests, and can link them to a login if they have one (that login is then always them). Logins nobody linked simply pick a person on a shared tablet. A person who has a login can now be removed (the login is not touched), so profiles that the earlier beta created for every login can be cleared out there.
+
 ## 0.1.0-beta.5
 
 - **Chores** (new part of the hub, can be switched off like Shopping and Meals):

@@ -39,6 +39,7 @@ class KshHubSheets extends LitElement {
     _regions: { state: true },
     _country: { state: true },
     _people: { state: true },
+    _logins: { state: true },
     _me: { state: true },
     _edit: { state: true },
     _form: { state: true },
@@ -57,6 +58,7 @@ class KshHubSheets extends LitElement {
     this._regions = null;
     this._country = '';
     this._people = [];
+    this._logins = [];
     this._me = null;
     this._edit = null;
     this._form = null;
@@ -164,6 +166,15 @@ class KshHubSheets extends LitElement {
       this._people = res.people;
       this._me = res.me;
     } catch (err) { this._error = err?.message || 'Could not load people'; }
+    this._loadLogins();
+  }
+
+  // Home Assistant logins an adult can link to a person (only adults are allowed to ask)
+  async _loadLogins() {
+    try {
+      const acting = resolveActing(this.hass, this._people, this._me);
+      this._logins = (await this.hass.callWS({ type: 'ksh_family_hub/people/users', ...actingMsg(this.hass, acting) })).users;
+    } catch { this._logins = []; }
   }
 
   get _iAmAdult() {
@@ -174,8 +185,8 @@ class KshHubSheets extends LitElement {
   _startPerson(p) {
     this._edit = p ? p.id : 'new';
     this._form = p
-      ? { name: p.name, role: p.role, emoji: p.emoji, pin: '', clearPin: false, notify: p.notify || '' }
-      : { name: '', role: 'child', emoji: '🙂', pin: '', clearPin: false, notify: '' };
+      ? { name: p.name, role: p.role, emoji: p.emoji, pin: '', clearPin: false, notify: p.notify || '', user_id: p.user_id || '' }
+      : { name: '', role: 'child', emoji: '🙂', pin: '', clearPin: false, notify: '', user_id: '' };
     this._error = null;
   }
 
@@ -184,7 +195,7 @@ class KshHubSheets extends LitElement {
     if (!f.name.trim()) { this._error = 'Give them a name'; return; }
     if (f.pin && !/^\d{4}$/.test(f.pin)) { this._error = 'A PIN is four digits'; return; }
     const acting = resolveActing(this.hass, this._people, this._me);
-    const base = { name: f.name.trim(), role: f.role, emoji: f.emoji || '🙂', notify: f.notify.trim() || null, ...actingMsg(this.hass, acting) };
+    const base = { name: f.name.trim(), role: f.role, emoji: f.emoji || '🙂', notify: f.notify.trim() || null, user_id: f.user_id || null, ...actingMsg(this.hass, acting) };
     let res;
     if (this._edit === 'new') res = await this._ws({ type: 'ksh_family_hub/people/add', ...base, ...(f.pin ? { pin: f.pin } : {}) });
     else res = await this._ws({ type: 'ksh_family_hub/people/update', person_id: this._edit, ...base, ...(f.pin ? { pin: f.pin } : f.clearPin ? { pin: null } : {}) });
@@ -193,7 +204,7 @@ class KshHubSheets extends LitElement {
 
   async _deletePerson() {
     const p = this._people.find(x => x.id === this._edit);
-    if (!confirm(`Remove ${p.name}? Points they earned stay in the history.`)) return;
+    if (!confirm(`Remove ${p.name}? ${p.user_id ? 'Their Home Assistant login is not touched. ' : ''}Points they earned stay in the history.`)) return;
     const acting = resolveActing(this.hass, this._people, this._me);
     const res = await this._ws({ type: 'ksh_family_hub/people/delete', person_id: p.id, ...actingMsg(this.hass, acting) });
     if (res) { this._edit = null; this._form = null; this._loadPeople(); }
@@ -366,6 +377,14 @@ class KshHubSheets extends LitElement {
             adult: 'Adults manage chores, approve them and look after people.',
             child: 'Children do chores and routines. An adult approves them.',
             guest: 'Guests only see chores that are assigned to them.' }[f.role]}</p>
+          <label>Home Assistant login <small>(optional)</small>
+            <select .value=${f.user_id} @change=${e => set({ user_id: e.target.value })}>
+              <option value="" ?selected=${!f.user_id}>No login (picked on a shared tablet)</option>
+              ${this._logins.filter(u => !u.linked_to || u.linked_to === person?.id).map(u => html`
+                <option value=${u.id} ?selected=${f.user_id === u.id}>${u.name}${u.is_admin ? ' (administrator)' : ''}</option>`)}
+            </select></label>
+          <p class="hint">${f.user_id ? `That login is always ${f.name.trim() || 'this person'}: chores are done as them on any device they sign in to, with no PIN needed.`
+            : 'Children, grandparents and guests do not need a login. Pick one only if this person has their own Home Assistant account.'}</p>
           <label>Picture</label>
           <div class="emojis"><input class="emoji-in" maxlength="8" .value=${f.emoji} @input=${e => set({ emoji: e.target.value })}>
             ${EMOJIS.map(e => html`<button type="button" class=${e === f.emoji ? 'on' : ''} @click=${() => set({ emoji: e })}>${e}</button>`)}</div>
@@ -380,19 +399,20 @@ class KshHubSheets extends LitElement {
           <p class="hint">The notify service of their phone in Home Assistant, used for chore reminders.</p>
           ${this._error ? html`<p class="err">${this._error}</p>` : nothing}
           <div class="actions">
-            ${this._edit !== 'new' && !person?.user_id ? html`<button class="danger" @click=${() => this._deletePerson()} ?disabled=${this._busy}>Remove</button>` : nothing}
+            ${this._edit !== 'new' ? html`<button class="danger" @click=${() => this._deletePerson()} ?disabled=${this._busy}>Remove</button>` : nothing}
             <button class="save" @click=${() => this._savePerson()} ?disabled=${this._busy}>Save</button>
           </div>
         </div>`;
     }
     return html`
       ${this._head('People & guests', true)}
-      <p class="hint">Everyone who uses the hub. Children and guests do not need a Home Assistant login: an adult adds them here,
-        and they are picked on a shared tablet.</p>
+      <p class="hint">Everyone who uses the hub. Nobody is added for you: an adult adds each person here, and can link them to a Home Assistant login
+        if they have one. Children and guests do not need a login; they are picked on a shared tablet.</p>
+      ${!this._people.length ? html`<p class="hint"><b>Start by adding yourself</b> and link your own login, then the children.</p>` : nothing}
       ${this._people.map(p => html`
         <button class="row" ?disabled=${!this._iAmAdult} @click=${() => this._startPerson(p)} style="--c:${p.color}">
           <span class="ico" style="font-size:22px">${p.emoji}</span>
-          <span class="txt"><b>${p.name}</b><small>${label[p.role]}${p.user_id ? '' : ' · no login'}${p.has_pin ? ' · PIN' : ''}</small></span>
+          <span class="txt"><b>${p.name}</b><small>${label[p.role]}${p.user_id ? ` · ${this._logins.find(u => u.id === p.user_id)?.name || 'has a login'}` : ' · no login'}${p.has_pin ? ' · PIN' : ''}</small></span>
           ${this._iAmAdult ? html`<ha-icon class="chev" icon="mdi:chevron-right"></ha-icon>` : nothing}
         </button>`)}
       ${this._iAmAdult ? this._row('mdi:account-plus-outline', 'Add a person', () => this._startPerson(null), { color: '#4fd1a1' })
@@ -492,7 +512,8 @@ class KshHubSheets extends LitElement {
     .pform label { display: grid; gap: 6px; font-weight: 700; font-size: 13.5px; margin-top: 4px; }
     .pform label small { color: var(--hub-muted); font-weight: 500; }
     .pform input { width: 100%; padding: 11px 14px; border-radius: 14px; border: 1px solid var(--hub-border); background: var(--hub-surface); color: var(--hub-text); outline: none; font-size: 15px; }
-    .pform input:focus { border-color: var(--hub-accent); }
+    .pform select { width: 100%; padding: 11px 14px; border-radius: 14px; border: 1px solid var(--hub-border); background: var(--hub-surface); color: var(--hub-text); outline: none; font-size: 15px; }
+    .pform input:focus, .pform select:focus { border-color: var(--hub-accent); }
     .seg { display: flex; border: 1px solid var(--hub-border); border-radius: 999px; overflow: hidden; }
     .seg button { flex: 1; background: transparent; border: none; padding: 9px 6px; font-weight: 700; color: var(--hub-muted); cursor: pointer; }
     .seg button.on { background: var(--hub-accent); color: var(--hub-accent-ink); }

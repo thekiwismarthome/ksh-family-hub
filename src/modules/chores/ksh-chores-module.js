@@ -479,6 +479,10 @@ class KshChoresModule extends LitElement {
       <div class="scroll">
         <div class="page">
           ${this._header()}
+          ${!this._people.length && this._isAdult ? html`
+            <div class="card pad addfam"><b>Add your family</b>
+              <p class="muted">Nobody is set up yet. People are never added automatically: add yourself, link your own login, then the children.</p>
+              <button class="primary" @click=${() => this.dispatchEvent(new CustomEvent('hub-sheet', { detail: { sheet: 'people' }, bubbles: true, composed: true }))}><ha-icon icon="mdi:account-multiple-plus-outline"></ha-icon>Add people</button></div>` : nothing}
           ${this._view === 'today' ? this._today() : nothing}
           ${this._view === 'chores' ? this._choresList() : nothing}
           ${this._view === 'routines' ? this._routines() : nothing}
