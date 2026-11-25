@@ -2,6 +2,10 @@
 
 Versions follow the date: **YEAR.MONTH.RELEASE**, with a `-betaN` suffix while in beta.
 
+## 2026.11.4
+
+- **Sync for the KSH Family Hub phone app.** A new `ksh_sync` part lets the standalone Android app keep its own copy of the family's people, chores, calendar, finance, shopping lists, recipes and meal plan in step with this Home Assistant, at home, away (Nabu Casa) or over a VPN. It only answers administrators (the data includes people and their PIN hashes), and only changes a part if it is exactly what the app last saw, so a change made here at the same moment is merged, never overwritten. Private shopping lists are never sent. Nothing changes in the web cards.
+
 ## 2026.11.3
 
 - **The menu stays at the bottom of the screen on a phone.** In the Home Assistant app the Family Hub page was not always given a height, so the menu ended up after the whole recipe list. The hub now sizes itself to the screen (and again when the phone turns or the keyboard opens).

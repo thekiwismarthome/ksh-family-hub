@@ -167,6 +167,8 @@ def _register_hub_commands(hass: HomeAssistant) -> None:
     households.async_register_commands(hass)
     people.async_register_commands(hass)
     prefs.async_register_commands(hass)
+    from .sync import handlers as sync_handlers
+    sync_handlers.async_register_commands(hass)
 
 
 @websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/get_info"})
