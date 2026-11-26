@@ -88,6 +88,11 @@ class SLMListHeader extends LitElement {
 
   handleMenuToggle(e) {
     e.stopPropagation();
+    this.toggleMenu();
+  }
+
+  /** Also called by the hub, whose tab row holds the menu button. */
+  toggleMenu() {
     this._menuOpen = !this._menuOpen;
   }
 
@@ -144,25 +149,7 @@ class SLMListHeader extends LitElement {
     const tiles = s.tilesPerRow == null ? 'auto' : s.tilesPerRow;
     const tileChoices = TILE_CHOICES.includes(tiles) ? TILE_CHOICES : [...TILE_CHOICES, tiles];
     const sw = (on) => html`<span class="sw ${on ? 'on' : ''}" aria-hidden="true"></span>`;
-    return html`
-      <div class="header">
-        ${this.hub ? html`
-          <span class="grow"></span>
-          <button class="round" aria-label=${viewMode === 'tile' ? t('List') : t('Tiles')} title=${viewMode === 'tile' ? t('List') : t('Tiles')}
-            @click=${() => this._dispatchSetting('viewMode', viewMode === 'tile' ? 'list' : 'tile')}>
-            <ha-icon icon=${viewMode === 'tile' ? 'mdi:view-agenda-outline' : 'mdi:view-grid-outline'}></ha-icon>
-          </button>` : html`
-          <button class="title-btn" @click=${this.handleBack} aria-label=${t('Lists')}>
-            <span class="title-line">${this.activeList?.name || t('Shopping List')}<ha-icon class="muted" icon="mdi:chevron-down"></ha-icon></span>
-            <span class="subtitle">${this.itemCount} ${t('left')} · ${this.currencySymbol}${Number(this.totalAmount || 0).toFixed(2)}</span>
-          </button>
-          <button class="round" aria-label=${t('Search products…')} @click=${() => this._emit('search-toggle')}>
-            <ha-icon icon="mdi:magnify"></ha-icon>
-          </button>`}
-        <div class="menu-wrap">
-          <button class="round" aria-label=${t('List options')} aria-expanded=${this._menuOpen ? 'true' : 'false'} @click=${this.handleMenuToggle}>
-            <ha-icon icon="mdi:dots-horizontal"></ha-icon>
-          </button>
+    const menu = html`
           ${this._menuOpen ? html`
             <div class="menu-dropdown" role="menu" @click=${e => e.stopPropagation()}>
               ${this.hub ? '' : html`
@@ -180,7 +167,7 @@ class SLMListHeader extends LitElement {
                   `)}
                 </div>
               ` : ''}
-              <div class="menu-divider"></div>
+              ${!this.hub || viewMode === 'tile' ? html`<div class="menu-divider"></div>` : ''}
               <div class="menu-section-label">${t('Sort')}</div>
               <button role="menuitemradio" aria-checked=${sortMode === 'category' ? 'true' : 'false'} class="item ${sortMode === 'category' ? 'sel' : ''}" @click=${() => { this._dispatchSetting('sortMode', 'category'); this._menuOpen = false; }}>
                 <span>${t('By Category')}</span>${sortMode === 'category' ? html`<ha-icon class="tick" icon="mdi:check"></ha-icon>` : ''}
@@ -197,6 +184,23 @@ class SLMListHeader extends LitElement {
               <button class="item danger-soft" role="menuitem" @click=${() => { this._menuOpen = false; this._emit('clear-checked'); }}><ha-icon icon="mdi:check-all"></ha-icon><span>${t('Clear checked items')}</span></button>
             </div>
           ` : ''}
+    `;
+    // In the hub the view and menu buttons are on the tab row (see hubActions); only the menu opens from here
+    if (this.hub) return html`<div class="header menu-only"><div class="menu-wrap">${menu}</div></div>`;
+    return html`
+      <div class="header">
+        <button class="title-btn" @click=${this.handleBack} aria-label=${t('Lists')}>
+          <span class="title-line">${this.activeList?.name || t('Shopping List')}<ha-icon class="muted" icon="mdi:chevron-down"></ha-icon></span>
+          <span class="subtitle">${this.itemCount} ${t('left')} · ${this.currencySymbol}${Number(this.totalAmount || 0).toFixed(2)}</span>
+        </button>
+        <button class="round" aria-label=${t('Search products…')} @click=${() => this._emit('search-toggle')}>
+          <ha-icon icon="mdi:magnify"></ha-icon>
+        </button>
+        <div class="menu-wrap">
+          <button class="round" aria-label=${t('List options')} aria-expanded=${this._menuOpen ? 'true' : 'false'} @click=${this.handleMenuToggle}>
+            <ha-icon icon="mdi:dots-horizontal"></ha-icon>
+          </button>
+          ${menu}
         </div>
       </div>
     `;
@@ -537,6 +541,10 @@ class SLMListHeader extends LitElement {
       cursor: pointer;
     }
     .grow { flex: 1; }
+    /* no height of its own: the menu drops over the list from the top right */
+    :host([ui-style="compact"]) .header.menu-only {
+      position: relative; z-index: 250; height: 0; min-height: 0; padding: 0 12px; justify-content: flex-end;
+    }
     .title-btn.static { cursor: default; }
     .switcher.static { cursor: default; }
     .title-line {

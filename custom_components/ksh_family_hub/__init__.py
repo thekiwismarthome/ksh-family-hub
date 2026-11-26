@@ -28,6 +28,7 @@ from .const import (
 )
 from . import households, people, prefs
 from .migrate import async_import_legacy_storage, async_import_report
+from .picture_folders import async_move_pictures, async_picture_report
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -87,6 +88,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         from .recipes.const import DOMAIN as RECIPES_NS, LEGACY_DOMAIN as RECIPES_LEGACY
 
         await async_import_legacy_storage(hass, MODULE_RECIPES, RECIPES_LEGACY, RECIPES_NS)
+        await async_move_pictures(hass, "recipes")
         unsubs.extend(await recipes.async_setup_module(hass, version))
 
     if modules[MODULE_SHOPPING]:
@@ -94,6 +96,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         from .shopping.const import DOMAIN as SHOPPING_NS, LEGACY_DOMAIN as SHOPPING_LEGACY
 
         await async_import_legacy_storage(hass, MODULE_SHOPPING, SHOPPING_LEGACY, SHOPPING_NS)
+        await async_move_pictures(hass, "shopping")
         country = entry.options.get("country") or entry.data.get("country") or DEFAULT_COUNTRY
         unsubs.extend(await shopping.async_setup_module(hass, version, country))
 
@@ -181,6 +184,7 @@ async def ws_get_info(hass, connection, msg) -> None:
         "modules": hub.get("modules", {MODULE_RECIPES: False, MODULE_SHOPPING: False, MODULE_CHORES: False, MODULE_CALENDAR: False, MODULE_FINANCE: False}),
         "hidden": hub.get("hidden", []),
         "imported": await async_import_report(hass),
+        "pictures": await async_picture_report(hass),
     })
 
 

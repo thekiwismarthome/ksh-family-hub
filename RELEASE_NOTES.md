@@ -2,6 +2,23 @@
 
 Versions follow the date: **YEAR.MONTH.RELEASE**, with a `-betaN` suffix while in beta.
 
+## 2026.11.5
+
+**More room on a phone**
+- The list and menu buttons in **Shopping**, and the view, keep-awake and add buttons in **Meals**, now sit on the tab row beside the settings gear, with a line between them. In Meals the tabs you are not on show as icons so everything fits.
+
+**Simpler settings**
+- **Shopping:** *Region & Catalog* and *Appearance* are gone from its settings. Colours are in the hub's settings, the region is under **Change Region/Language** in the menu, and tiles per row is in the list's menu. Emojis, recently used, the picture folder and fonts are now under **Pictures & text**. **Custom regions…** is on the Region and language sheet.
+- **Meals:** the *Appearance* tab is now **General**, without the language, recipe columns and list/tiles choices.
+
+**New picture folders**
+- Pictures now live in `config/www/images/ksh-family-hub/shopping` and `.../recipes` (`/local/images/ksh-family-hub/...`).
+- On the first start, pictures from `images/groceries`, `images/shopping_list_manager` and `images/recipe_manager` are **copied** there and the saved links are updated. The old folders are left as they were. The previous data is kept in `.storage/ksh_family_hub.before_picture_move.*`.
+- Put new pictures of your own in the new folder: pictures added to an old folder afterwards are not picked up.
+- A picture folder you chose yourself is left unchanged.
+
+Restart Home Assistant after updating.
+
 ## 2026.11.4
 
 - **Sync for the KSH Family Hub phone app.** A new `ksh_sync` part lets the standalone Android app keep its own copy of the family's people, chores, calendar, finance, shopping lists, recipes and meal plan in step with this Home Assistant, at home, away (Nabu Casa) or over a VPN. It only answers administrators (the data includes people and their PIN hashes), and only changes a part if it is exactly what the app last saw, so a change made here at the same moment is merged, never overwritten. Private shopping lists are never sent. Nothing changes in the web cards.

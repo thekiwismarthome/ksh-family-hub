@@ -4,6 +4,7 @@ import { t, I18nController } from '../services/translator.js';
 import { settingsGroupStyles } from '../styles/ui-styles.js';
 import { THEMES, themeEntry } from '../styles/accents.js';
 import './slm-font-settings.js';
+import { DEFAULT_IMAGE_FOLDER } from '../services/image-folder.js';
 
 // Interface styles the user can pick between (see styles in each component)
 const UI_STYLES = [
@@ -16,6 +17,7 @@ class SLMAppearanceSettings extends LitElement {
   static properties = {
     settings: { type: Object },
     isEmbedded: { type: Boolean },
+    hubMode: { type: Boolean },
     // 'classic' | 'fresh' | 'compact' (current interface style)
     uiStyle: { type: String, attribute: 'ui-style', reflect: true },
     showFontSettings: { type: Boolean }
@@ -43,7 +45,7 @@ class SLMAppearanceSettings extends LitElement {
           <button class="back-btn" @click=${() => this.dispatchEvent(new Event('back'))}>
             <ha-icon icon="mdi:arrow-left"></ha-icon>
           </button>
-          <h2>${t('Appearance')}</h2>
+          <h2>${this.hubMode ? t('Pictures & text') : t('Appearance')}</h2>
         </div>
 
         <div class="settings-list">
@@ -134,6 +136,7 @@ class SLMAppearanceSettings extends LitElement {
             </label>
           </div>
 
+          ${this.hubMode ? '' : html`
           <div class="settings-item">
             <div class="item-content full-width">
               <div class="item-title">${t('Tiles Per Row')}</div>
@@ -151,6 +154,7 @@ class SLMAppearanceSettings extends LitElement {
               </div>
             </div>
           </div>
+          `}
 
           </div>
 
@@ -185,7 +189,7 @@ class SLMAppearanceSettings extends LitElement {
               <input
                 class="text-input"
                 type="text"
-                placeholder="/local/images/groceries"
+                placeholder=${DEFAULT_IMAGE_FOLDER}
                 .value=${this.settings.localImagePath || ''}
                 @change=${(e) => this.handleSettingChange('localImagePath', e.target.value.trim())}
               />

@@ -6,6 +6,8 @@ import { themeOverrides } from './styles/accents.js';
 import { loadTranslations, getLanguageCode, setTranslations, t } from './services/translator.js';
 import './components/slm-bottom-nav.js';
 import './components/slm-list-header.js';
+import { publishActions } from '../../hub/module-actions.js';
+import { DEFAULT_IMAGE_FOLDER, moveImageFolder } from './services/image-folder.js';
 import './components/slm-options-sheet.js';
 import './components/slm-search-bar.js';
 import './components/slm-item-grid.js';
@@ -224,7 +226,8 @@ class ShoppingListManagerCard extends LitElement {
       sortMode: 'category',
       showRecentlyUsed: true,
       showPriceOnTile: true,
-      localImagePath: '/local/images/groceries',
+      localImagePath: DEFAULT_IMAGE_FOLDER,
+      imageFolderMoved: true,
       fontWeight: 'normal',
       syncAcrossDevices: true
     };
@@ -232,7 +235,7 @@ class ShoppingListManagerCard extends LitElement {
     const key = this._getSettingsKey();
     const saved = localStorage.getItem(key);
     if (saved) {
-      return this._migrateTiles({ ...defaults, ...JSON.parse(saved) });
+      return this._migrateTiles({ ...defaults, ...moveImageFolder(JSON.parse(saved)) });
     }
 
     // Migration: on first load with a card-specific key, copy from the old
@@ -241,7 +244,7 @@ class ShoppingListManagerCard extends LitElement {
       const oldKey = `slm_settings_${this._settingsUserId}`;
       const oldSaved = localStorage.getItem(oldKey);
       if (oldSaved) {
-        const migrated = this._migrateTiles({ ...defaults, ...JSON.parse(oldSaved) });
+        const migrated = this._migrateTiles({ ...defaults, ...moveImageFolder(JSON.parse(oldSaved)) });
         localStorage.setItem(key, JSON.stringify(migrated));
         return migrated;
       }
@@ -317,7 +320,7 @@ class ShoppingListManagerCard extends LitElement {
       if (action === 'push') {
         await this._pushSettings();
       } else if (action === 'apply') {
-        this.settings = mergeRemote(this.settings, remote.settings);
+        this.settings = mergeRemote(this.settings, moveImageFolder(remote.settings));
         localStorage.setItem(this._getSettingsKey(), JSON.stringify(this.settings));
         this._lastPushedJson = JSON.stringify(pickSyncable(this.settings));
         this._saveSyncMeta({ syncedAt: remote.updated_at, dirty: false });
@@ -341,7 +344,40 @@ class ShoppingListManagerCard extends LitElement {
     console.warn(`[SLM] Settings sync ${what} failed:`, err?.message || err?.code || err);
   }
 
+  // ---- buttons shown on the hub's tab row ------------------------------
+
+  get hubActions() {
+    if (!this.hubMode || this.loading || this.currentView !== 'shopping' || this._ui !== 'compact') return [];
+    if (this._loadError && !this.activeList) return [];
+    const tiles = (this.settings?.viewMode || 'tile') === 'tile';
+    return [
+      { id: 'view', icon: tiles ? 'mdi:view-agenda-outline' : 'mdi:view-grid-outline', label: tiles ? t('List') : t('Tiles') },
+      { id: 'menu', icon: 'mdi:dots-horizontal', label: t('List options'), popup: true },
+    ];
+  }
+
+  runHubAction(id) {
+    if (id === 'view') {
+      const tiles = (this.settings?.viewMode || 'tile') === 'tile';
+      this.handleMenuSettingChange({ detail: { key: 'viewMode', value: tiles ? 'list' : 'tile' } });
+    } else if (id === 'menu') {
+      this.renderRoot.querySelector('ksh-slm-list-header')?.toggleMenu();
+    }
+  }
+
+  /** Called by the hub (Region and language > Custom regions). */
+  async openCustomRegions() {
+    this.currentView = 'settings';
+    for (let i = 0; i < 40; i++) {
+      await this.updateComplete;
+      const view = this.renderRoot.querySelector('ksh-slm-settings-view');
+      if (view) { view.handleNavigation('regions'); return; }
+      await new Promise(r => setTimeout(r, 100));
+    }
+  }
+
   updated(changed) {
+    if (this.hubMode) publishActions(this);
     if (changed.has('currentView') && this.hubMode) {
       this.dispatchEvent(new CustomEvent('module-view-changed', {
         detail: { view: this.currentView }, bubbles: true, composed: true,
@@ -1361,6 +1397,7 @@ class ShoppingListManagerCard extends LitElement {
               .settings=${this.settings}
               .lists=${this.lists}
               .isEmbedded=${this.isEmbedded || this.hubMode}
+              .hubMode=${this.hubMode}
               .categories=${this.categories}
               .uiStyle=${this._ui}
               @settings-changed=${this.handleSettingsChange}

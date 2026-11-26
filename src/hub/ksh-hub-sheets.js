@@ -59,6 +59,7 @@ class KshHubSheets extends LitElement {
     this._itemName = '';
     this._toast = null;
     this._regions = null;
+    this._custom = [];
     this._country = '';
     this._people = [];
     this._logins = [];
@@ -83,7 +84,7 @@ class KshHubSheets extends LitElement {
     if (changed.has('sheet')) {
       this._error = null; this._quick = null; this._itemName = ''; this._toast = null;
       if (this.sheet === 'menu') this._switcher = false;
-      if (this.sheet === 'region' && !this._regions) this._loadRegions();
+      if (this.sheet === 'region') this._loadRegions();     // every time: a custom region may have been added since
       if (this.sheet === 'people') { this._edit = null; this._loadPeople(); }
     }
     const sheet = this.renderRoot.querySelector('.sheet');
@@ -227,6 +228,7 @@ class KshHubSheets extends LitElement {
       const custom = Object.fromEntries(Object.entries(res.custom_regions || {})
         .map(([c, v]) => [c, typeof v === 'string' ? v : v?.name || c]));
       this._regions = { ...(res.available_countries || {}), ...custom };
+      this._custom = Object.keys(custom);
       this._country = res.country || '';
     } catch (err) { this._regions = {}; this._error = 'Could not load the regions.'; }
   }
@@ -234,7 +236,10 @@ class KshHubSheets extends LitElement {
   async _setRegion(code) {
     if (!code || code === this._country) return;
     const name = this._regions[code] || code;
-    if (!confirm(`Switch the shopping catalogue to ${name}?\n\nThe built-in products are replaced with ${name} products. Products you created yourself are kept.`)) {
+    const effect = this._custom.includes(code)
+      ? 'The built-in products are removed: add your own products after switching.'
+      : `The built-in products are replaced with ${name} products.`;
+    if (!confirm(`Switch the shopping catalogue to ${name}?\n\n${effect} Products you created yourself are kept.`)) {
       this.requestUpdate(); return;
     }
     const res = await this._ws({ type: 'ksh_shopping/set_country', country: code });
@@ -475,12 +480,18 @@ class KshHubSheets extends LitElement {
               html`<option value=${c} ?selected=${c === this._country}>${n}</option>`)}
           </select>
         </label>
-        <p class="hint">Sets the shopping catalogue, currency and supermarkets.</p>` : nothing}
+        <p class="hint">Sets the shopping catalogue, currency and supermarkets.</p>
+        <button class="linkrow" @click=${() => this._emit('hub-custom-regions')}>
+          <ha-icon icon="mdi:earth-plus"></ha-icon><span>Custom regions…</span><ha-icon icon="mdi:chevron-right"></ha-icon>
+        </button>` : nothing}
       ${this._toast ? html`<p class="ok"><ha-icon icon="mdi:check-circle"></ha-icon>${this._toast}</p>` : nothing}
       ${this._error ? html`<p class="err">${this._error}</p>` : nothing}`;
   }
 
   static styles = [avatarCss, css`
+    .linkrow { display: flex; align-items: center; gap: 10px; width: 100%; margin-top: 12px; padding: 12px 14px; border-radius: 14px; cursor: pointer;
+      border: 1px solid var(--hub-border); background: var(--hub-surface); text-align: left; font-weight: 700; --mdc-icon-size: 20px; }
+    .linkrow span { flex: 1; }
     :host { position: absolute; inset: 0; z-index: 30; pointer-events: none; display: block; }
     :host([sheet]) { pointer-events: auto; }
     * { box-sizing: border-box; }

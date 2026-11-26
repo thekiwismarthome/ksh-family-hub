@@ -58,6 +58,7 @@ export class KshFamilyHubCard extends LitElement {
     _info: { state: true },
     _error: { state: true },
     _route: { state: true },
+    _actions: { state: true },
     _rail: { state: true },
     _moreOpen: { state: true },
     _theme: { state: true },
@@ -96,6 +97,7 @@ export class KshFamilyHubCard extends LitElement {
     this._actingId = null;
     this._gen = 0;
     this._visited = new Set();
+    this._actions = {};
     if (!['home', 'settings'].includes(this._route)) this._visited.add(this._route === 'cards' ? 'shopping' : this._route);
     this._infoRequested = false;
     this._pending = null;
@@ -276,7 +278,7 @@ export class KshFamilyHubCard extends LitElement {
     const next = { ...info, modules: { ...info.modules, ...(patch.modules || {}) }, hidden };
     const reloads = Object.keys(patch.modules || {}).some(k => !!patch.modules[k] !== !!info.modules[k]);
     this._info = next;
-    if (reloads) { this._gen += 1; this._visited = new Set(); }
+    if (reloads) { this._gen += 1; this._visited = new Set(); this._actions = {}; }
     if (!this._available(this._route)) this._setRoute('home');
 
     const send = { ...(patch.modules || {}) };
@@ -454,6 +456,27 @@ export class KshFamilyHubCard extends LitElement {
     this._subView = { ...this._subView, [id]: e.detail.view };
   }
 
+  _onModuleActions(id, e) {
+    this._actions = { ...this._actions, [id]: e.detail.actions };
+  }
+
+  _runAction(e, route, id) {
+    e.stopPropagation();     // otherwise a menu opened by this press sees the same press as "outside" and shuts
+    this.renderRoot.querySelector(`#mod-${route}`)?.runHubAction(id);
+  }
+
+  // "Custom regions…" in the Region and language sheet: the page lives in the shopping part
+  async _openCustomRegions() {
+    this._sheet = null;
+    this._setRoute('shopping');
+    for (let i = 0; i < 40; i++) {
+      await this.updateComplete;
+      const el = this.renderRoot.querySelector('#mod-shopping');
+      if (el?.openCustomRegions) { el.openCustomRegions(); return; }
+      await new Promise(r => setTimeout(r, 100));
+    }
+  }
+
   // ---- render -------------------------------------------------------------
 
   render() {
@@ -481,6 +504,7 @@ export class KshFamilyHubCard extends LitElement {
         @hub-households-changed=${e => this._loadHouseholds(e.detail.select)}
         @hub-open-settings=${() => { this._sheet = null; this._setRoute('settings'); }}
         @hub-set-language=${e => this._setLanguage(e.detail.code)}
+        @hub-custom-regions=${() => this._openCustomRegions()}
         @hub-quick=${e => { const id = e.detail.id; if (id === 'meals') this._quickRecipe(); else if (id === 'chores') this._quickChore(); else if (['event', 'reminders', 'birthdays'].includes(id)) this._quickEvent(id); }}
         @hub-region-changed=${() => { this._gen++; }}
         @hass-toggle-menu=${() => { this._sheet = null; }}></ksh-hub-sheets>
@@ -508,6 +532,9 @@ export class KshFamilyHubCard extends LitElement {
     const tabs = SUB_TABS[route];
     const sub = this._subView[route] || MODULE_DEFAULT_VIEW[route];
     const showTabs = tabs && !(HIDE_TABS_IN[route] || []).includes(sub);
+    const actions = (showTabs && this._actions[route]) || [];
+    // three tabs plus buttons do not fit a phone as words: the tabs not in use become icons there
+    const crowded = actions.length > 0 && tabs.filter(t => t.view !== 'settings').length >= 3;
     const dark = this._dark;
     const ui = 'compact';
 
@@ -533,13 +560,21 @@ export class KshFamilyHubCard extends LitElement {
           @hub-navigate=${this._onNavigate}></ksh-hub-placeholder>` : nothing}
 
       ${showTabs ? html`
-        <nav class="subtabs" aria-label="Sections">
+        <nav class="subtabs ${crowded ? 'crowded' : ''}" aria-label="Sections">
           <div class="subtab-list">
             ${tabs.filter(t => t.view !== 'settings').map(t => html`
-              <button class="subtab ${sub === t.view ? 'active' : ''}" @click=${() => this._tabSelect(t.view)}>
+              <button class="subtab ${sub === t.view ? 'active' : ''}" title=${t.label} aria-label=${t.label}
+                @click=${() => this._tabSelect(t.view)}>
                 <ha-icon icon=${t.icon}></ha-icon><span>${t.label}</span>
               </button>`)}
           </div>
+          ${actions.length ? html`
+            <div class="tab-actions">
+              ${actions.map(a => html`
+                <button class="tab-action ${a.active ? 'active' : ''} ${a.primary ? 'primary' : ''}" title=${a.label} aria-label=${a.label}
+                  aria-haspopup=${a.popup ? 'menu' : nothing} ?disabled=${!!a.disabled}
+                  @click=${e => this._runAction(e, route, a.id)}><ha-icon icon=${a.icon}></ha-icon></button>`)}
+            </div>` : nothing}
           ${tabs.some(t => t.view === 'settings') ? html`
             <button class="subtab gear ${sub === 'settings' ? 'active' : ''}" title="Settings" aria-label="Settings"
               @click=${() => this._tabSelect('settings')}><ha-icon icon="mdi:cog-outline"></ha-icon></button>` : nothing}
@@ -550,13 +585,15 @@ export class KshFamilyHubCard extends LitElement {
           <div class="module" ?hidden=${route !== 'shopping' && route !== 'cards'}>
             <ksh-shopping-module id="mod-shopping" hub-mode
               .hass=${this.hass} .hostUi=${ui} .hostDark=${dark}
-              @module-view-changed=${e => this._onModuleView('shopping', e)}></ksh-shopping-module>
+              @module-view-changed=${e => this._onModuleView('shopping', e)}
+              @module-actions-changed=${e => this._onModuleActions('shopping', e)}></ksh-shopping-module>
           </div>` : nothing}
         ${this._visited.has('meals') && this._info.modules.recipes ? html`
           <div class="module" ?hidden=${route !== 'meals'}>
             <ksh-recipes-module id="mod-meals" hub-mode
               .hass=${this.hass} .hostUi=${ui} .hostDark=${dark}
-              @module-view-changed=${e => this._onModuleView('meals', e)}></ksh-recipes-module>
+              @module-view-changed=${e => this._onModuleView('meals', e)}
+              @module-actions-changed=${e => this._onModuleActions('meals', e)}></ksh-recipes-module>
           </div>` : nothing}
         ${this._visited.has('chores') && this._info.modules.chores ? html`
           <div class="module" ?hidden=${route !== 'chores'}>
@@ -695,6 +732,29 @@ export class KshFamilyHubCard extends LitElement {
     }
     .subtab ha-icon { --mdc-icon-size: 18px; }
     .subtab.active { background: var(--hub-accent); color: var(--hub-accent-ink); border-color: transparent; }
+    /* the part's own buttons: squares, with a line between them and the round settings gear so they read as separate */
+    .tab-actions { flex: none; display: flex; gap: 6px; padding-right: 9px; margin-right: 1px; border-right: 1px solid var(--hub-border); }
+    .tab-action {
+      width: 38px; height: 38px; padding: 0; border: none; border-radius: 12px; cursor: pointer;
+      display: inline-flex; align-items: center; justify-content: center; --mdc-icon-size: 21px;
+      background: var(--hub-surface-2); color: var(--hub-text); -webkit-tap-highlight-color: transparent;
+    }
+    .tab-action.active, .tab-action.primary { background: var(--hub-accent); color: var(--hub-accent-ink); }
+    .tab-action:disabled { opacity: .4; cursor: default; }
+    @media (max-width: 460px) {
+      .subtabs.crowded { gap: 6px; padding-inline: 10px; }
+      .subtabs.crowded .subtab-list { gap: 4px; }
+      .subtabs.crowded .tab-actions { gap: 4px; padding-right: 6px; margin-right: 0; }
+      .subtabs.crowded .tab-action, .subtabs.crowded .subtab.gear { width: 34px; height: 34px; }
+      .subtabs.crowded .subtab:not(.gear) { height: 34px; padding: 0 10px; }
+      .subtabs.crowded .subtab:not(.gear):not(.active) { width: 34px; padding: 0; justify-content: center; }
+      .subtabs.crowded .subtab:not(.gear):not(.active) ha-icon { display: inline-flex; }
+      .subtabs.crowded .subtab:not(.gear):not(.active) span { display: none; }
+    }
+    @media (max-width: 340px) {
+      .subtabs.crowded { padding-inline: 6px; }
+      .subtabs.crowded .tab-action, .subtabs.crowded .subtab.gear, .subtabs.crowded .subtab:not(.gear):not(.active) { width: 31px; }
+    }
 
     /* ---- tiles (shared by bar, rail and sheet) ---- */
     .tile {

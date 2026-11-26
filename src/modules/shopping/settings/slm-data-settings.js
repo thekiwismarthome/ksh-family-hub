@@ -12,6 +12,8 @@ class SLMDataSettings extends LitElement {
     // 'classic' | 'fresh' | 'compact' (set by the settings view)
     uiStyle: { type: String, attribute: 'ui-style', reflect: true },
     api: { type: Object },
+    // Only the page for making your own regions: choosing the active region is in the hub's Region and language sheet
+    customOnly: { type: Boolean },
     _currentCountry: { type: String, state: true },
     _availableCountries: { type: Object, state: true },
     _customRegions: { type: Object, state: true },
@@ -176,7 +178,10 @@ class SLMDataSettings extends LitElement {
       const updated = { ...this._availableCountries };
       delete updated[code];
       this._availableCountries = updated;
-      if (this._currentCountry === code) this._currentCountry = 'NZ';
+      if (this._currentCountry === code) {
+        this._currentCountry = 'NZ';
+        this.dispatchEvent(new CustomEvent('region-changed', { detail: { country: 'NZ' }, bubbles: true, composed: true }));
+      }
       this._regionMessage = `success:Region "${name}" deleted.`;
     } catch (err) {
       this._regionMessage = 'error:Failed to delete region.';
@@ -194,13 +199,14 @@ class SLMDataSettings extends LitElement {
           <button class="back-btn" @click=${() => this.dispatchEvent(new Event('back'))}>
             <ha-icon icon="mdi:arrow-left"></ha-icon>
           </button>
-          <h2>${t('Region & Catalog')}</h2>
+          <h2>${this.customOnly ? t('Custom Regions') : t('Region & Catalog')}</h2>
         </div>
 
         ${this._loading ? html`
           <div class="loading">${t('Loading…')}</div>
         ` : html`
           <div class="settings-list">
+            ${this.customOnly ? '' : html`
             <div class="section-header">${t('Product Catalog Region')}</div>
 
             <div class="settings-item">
@@ -237,8 +243,9 @@ class SLMDataSettings extends LitElement {
             ${this._successMessage ? html`<div class="message success">${this._successMessage}</div>` : ''}
             ${this._errorMessage ? html`<div class="message error">${this._errorMessage}</div>` : ''}
             ${this._saving ? html`<div class="message info">${t('Switching catalog…')}</div>` : ''}
+            `}
 
-            <div class="section-header">${t('Custom Regions')}</div>
+            ${this.customOnly ? '' : html`<div class="section-header">${t('Custom Regions')}</div>`}
 
             <div class="settings-item">
               <div class="item-content">
@@ -246,6 +253,7 @@ class SLMDataSettings extends LitElement {
                   Create your own region if your country isn't listed, or to maintain a
                   personalised product catalog. Custom regions start empty — add your own
                   products after switching.
+                  ${this.customOnly ? 'Choose the region in use from the menu, under Change Region/Language.' : ''}
                 </div>
               </div>
             </div>
@@ -337,6 +345,7 @@ class SLMDataSettings extends LitElement {
               </div>
             ` : ''}
 
+            ${this.customOnly ? '' : html`
             <div class="section-header">${t('About')}</div>
             <div class="settings-item">
               <div class="item-content">
@@ -348,6 +357,7 @@ class SLMDataSettings extends LitElement {
                 </div>
               </div>
             </div>
+            `}
           </div>
         `}
       </div>

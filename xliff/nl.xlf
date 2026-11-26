@@ -1248,6 +1248,12 @@
   <source>Clear search</source>
         <target>Zoekopdracht wissen</target>
 </trans-unit>
+<trans-unit id="sc3ac225273c8316b">
+  <source>General</source>
+<target>Algemeen</target></trans-unit>
+<trans-unit id="s0b382cb50ce7e39c">
+  <source>Units</source>
+<target>Eenheden</target></trans-unit>
 </body>
 </file>
 </xliff>

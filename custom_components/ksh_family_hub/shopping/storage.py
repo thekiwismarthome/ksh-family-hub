@@ -6,7 +6,6 @@ import json
 import logging
 import os
 import re
-import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Any
@@ -28,9 +27,7 @@ from .const import (
     IMAGES_LOCAL_DIR,
     IMAGE_SIZE,
     IMAGE_QUALITY,
-    LEGACY_IMAGES_LOCAL_DIR,
     LOCAL_IMAGE_URL_PREFIX,
-    LEGACY_IMAGE_URL_PREFIX,
 )
 from .data.catalog_loader import load_product_catalog
 from .models import ShoppingList, Item, Product, Category, LoyaltyCard, Group, Supermarket, generate_id
@@ -77,7 +74,6 @@ class ShoppingListStorage:
         self._user_settings: Dict[str, Dict[str, Any]] = {}
         self._search_engine: Optional[ProductSearch] = None
         self._images_dir = Path(hass.config.path(IMAGES_LOCAL_DIR))
-        self._legacy_images_dir = Path(hass.config.path(LEGACY_IMAGES_LOCAL_DIR))
     
     async def async_load(self) -> None:
         """Load data from storage."""
@@ -119,9 +115,8 @@ class ShoppingListStorage:
             }
             _LOGGER.debug("Loaded %d products", len(self._products))
 
-        # Ensure image directory exists and migrate legacy image paths/URLs.
+        # Ensure the image directory exists.
         self._images_dir.mkdir(parents=True, exist_ok=True)
-        await self._migrate_legacy_images_and_urls()
         await self._migrate_inline_images()
         
         # Load country-specific system categories so labels follow the selected country.
@@ -637,62 +632,6 @@ class ShoppingListStorage:
         data = {product_id: product.to_dict() for product_id, product in self._products.items()}
         await self._store_products.async_save(data)
 
-    def _move_legacy_image_files(self) -> int:
-        """Move image files from the old folder to the new one (blocking: call from the executor)."""
-        moved_files = 0
-        if self._legacy_images_dir.exists() and self._legacy_images_dir != self._images_dir:
-            for src in self._legacy_images_dir.glob("*"):
-                if not src.is_file():
-                    continue
-                dest = self._images_dir / src.name
-                if dest.exists():
-                    continue
-                try:
-                    shutil.move(str(src), str(dest))
-                    moved_files += 1
-                except Exception as err:
-                    _LOGGER.debug("Could not move legacy image %s: %s", src, err)
-        return moved_files
-
-    async def _migrate_legacy_images_and_urls(self) -> None:
-        """Move old image files and rewrite stored URLs to the new path."""
-        updated_product_urls = 0
-        updated_item_urls = 0
-
-        # File work runs in the executor: touching the disk inside the event loop blocks Home Assistant
-        moved_files = await self.hass.async_add_executor_job(self._move_legacy_image_files)
-
-        for product in self._products.values():
-            image_url = product.image_url or ""
-            if image_url.startswith(LEGACY_IMAGE_URL_PREFIX):
-                product.image_url = image_url.replace(
-                    LEGACY_IMAGE_URL_PREFIX, LOCAL_IMAGE_URL_PREFIX, 1
-                )
-                updated_product_urls += 1
-
-        for items in self._items.values():
-            for item in items:
-                image_url = item.image_url or ""
-                if image_url.startswith(LEGACY_IMAGE_URL_PREFIX):
-                    item.image_url = image_url.replace(
-                        LEGACY_IMAGE_URL_PREFIX, LOCAL_IMAGE_URL_PREFIX, 1
-                    )
-                    updated_item_urls += 1
-
-        if updated_product_urls:
-            await self._save_products()
-        if updated_item_urls:
-            await self._save_items()
-
-        if moved_files or updated_product_urls or updated_item_urls:
-            _LOGGER.info(
-                "Migrated shopping list images to %s (moved_files=%d, updated_product_urls=%d, updated_item_urls=%d)",
-                IMAGES_LOCAL_DIR,
-                moved_files,
-                updated_product_urls,
-                updated_item_urls,
-            )
-    
     async def _externalize_data_image(self, image_url: Optional[str], stem: str) -> Optional[str]:
         """Convert an inline ``data:image/...`` URL into a small WebP file.
 

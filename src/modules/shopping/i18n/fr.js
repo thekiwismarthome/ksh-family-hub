@@ -310,5 +310,7 @@ export default {
   "This page is not on a secure (HTTPS) address, so the browser will not share its location.": "Cette page n'utilise pas d'adresse sécurisée (HTTPS), le navigateur ne partagera donc pas sa position.",
   "This device cannot share its location with the page.": "Cet appareil ne peut pas partager sa position avec la page.",
   "Link your phone to your person in the Home Assistant app, or type the coordinates.": "Associez votre téléphone à votre personne dans l'app Home Assistant, ou saisissez les coordonnées.",
-  "Could not get your location.": "Impossible d'obtenir votre position."
+  "Could not get your location.": "Impossible d'obtenir votre position.",
+  "Pictures & text": "Images et texte",
+  "Product pictures, fonts and recently used": "Images des produits, polices et récemment utilisés"
 };

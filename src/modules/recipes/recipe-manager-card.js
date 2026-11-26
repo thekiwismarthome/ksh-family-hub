@@ -16,6 +16,7 @@ import './components/rm-add-recipe-dialog.js';
 import './components/rm-meal-planner.js';
 import './components/rm-settings-view.js';
 import './components/rm-shopping-view.js';
+import { publishActions } from '../../hub/module-actions.js';
 
 // ---------------------------------------------------------------------------
 // Settings helpers
@@ -403,6 +404,37 @@ class RecipeManagerCard extends LitElement {
     setActiveLocale(code);
   }
 
+  // -- Buttons on the hub's tab row -------------------------------------------
+  // On a phone in the hub, the header's buttons sit next to the settings gear, and the header row goes.
+
+  get _actionsOnTabs() {
+    if (!this.hubMode || this._wide) return false;
+    if (this._view === 'timers' && this._timersPrevView === 'detail') return false;    // keeps its "back to recipe" arrow
+    return ['grid', 'planner', 'timers', 'settings'].includes(this._view);
+  }
+
+  get hubActions() {
+    if (!this._actionsOnTabs || this._view === 'settings') return [];
+    const onGrid = this._view === 'grid' && this._ui === 'compact';
+    const tiles = this._settings.recipeView === 'tiles';
+    const wakeTitle = !isWakeLockSupported()
+      ? msg('Keep screen awake — requires a secure (HTTPS) connection and a supported browser')
+      : this._globalWakeActive ? msg('Screen awake — click to allow sleep') : msg('Keep screen awake');
+    return [
+      ...(onGrid ? [{ id: 'view', icon: tiles ? 'mdi:view-agenda-outline' : 'mdi:view-grid-outline',
+        label: tiles ? msg('Show as a list') : msg('Show as tiles') }] : []),
+      { id: 'wake', icon: this._globalWakeActive ? 'mdi:eye' : 'mdi:eye-off-outline', label: wakeTitle,
+        active: this._globalWakeActive, disabled: !isWakeLockSupported() },
+      ...(onGrid ? [{ id: 'add', icon: 'mdi:plus', label: msg('New Recipe'), primary: true }] : []),
+    ];
+  }
+
+  runHubAction(id) {
+    if (id === 'view') this._toggleRecipeView();
+    else if (id === 'wake') this._toggleGlobalWakeLock();
+    else if (id === 'add') { this._navDirection = 'forward'; this._view = 'add'; }
+  }
+
   setHubView(view) {
     if (view === this._view) return;
     this._navDirection = 'forward';
@@ -489,6 +521,7 @@ class RecipeManagerCard extends LitElement {
     }
     if (changedProps.has('_view') && this._overlayOpen) this._overlayOpen = false;
     if (changedProps.has('_view') || changedProps.has('_selectedRecipe')) this._saveViewState();
+    if (this.hubMode) publishActions(this);
   }
 
   // -- View-state persistence -------------------------------------------------
@@ -1220,6 +1253,9 @@ class RecipeManagerCard extends LitElement {
     const inAdd = this._view === 'add';
     const inTimers = this._view === 'timers';
     const wide = this._wide;
+    const onTabs = this._actionsOnTabs;
+    // With the buttons on the hub's tab row, only running timers still need a row of their own
+    if (onTabs && !(this._timers.length && this._view !== 'timers')) return '';
 
     const title =
       inSettings ? msg('Settings')
@@ -1231,7 +1267,7 @@ class RecipeManagerCard extends LitElement {
                   : this.hubMode ? '' : msg('Recipes');   // the hub's top bar already says Meals
 
     return html`
-      <div class="rm-header">
+      <div class="rm-header ${onTabs ? 'timers-only' : ''}">
         <div class="rm-header-left">
           ${inDetail || inAdd ? html`
             <button class="icon-btn" @click=${this._handleBack} title="${msg('Back')}">
@@ -1286,6 +1322,7 @@ class RecipeManagerCard extends LitElement {
 
           ${inDetail ? this._renderStars(this._selectedRecipe.rating) : ''}
 
+          ${onTabs ? '' : html`
           ${this._view === 'grid' && this._ui === 'compact' ? html`
             <button class="icon-btn" @click=${this._toggleRecipeView}
               title="${this._settings.recipeView === 'tiles' ? msg('Show as a list') : msg('Show as tiles')}"
@@ -1319,6 +1356,7 @@ class RecipeManagerCard extends LitElement {
               <ha-icon icon="${this._mobileMenuOpen ? 'mdi:close' : 'mdi:menu'}"></ha-icon>
             </button>
           ` : ''}
+          `}
         </div>
       </div>
     `;
@@ -2948,6 +2986,9 @@ class RecipeManagerCard extends LitElement {
     ha-card.rm-overlay-open .rm-fab { display: none; }
     /* ----- KSH Family Hub: the hub provides navigation, the module just fills its space ----- */
     :host([data-hub]) { height: 100%; max-height: none; }
+    :host([data-hub]) .rm-header.timers-only { padding: 6px 12px 0; }
+    .rm-header.timers-only .rm-header-left { display: none; }
+    .rm-header.timers-only .rm-header-right { flex: 1; justify-content: flex-end; }
     .hub-search {
       display: flex; align-items: center; gap: 6px; min-width: 180px; max-width: 320px; flex: 1;
       padding: 0 10px; height: 38px; border-radius: 999px;

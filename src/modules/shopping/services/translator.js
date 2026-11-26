@@ -100,6 +100,7 @@ export const UI_STRINGS = [
   'Support', 'FAQ & Support', 'Refresh', 'App',
   'Shopping List Manager', 'SLM Card',
   // Appearance settings
+  'Pictures & text', 'Product pictures, fonts and recently used',
   'Dark Mode', 'Theme', 'Display', 'Use Emojis Instead of Icons',
   'Tiles Per Row', 'Recently Used Products', 'products',
   'Product Images', 'Local HA Image Path', 'Auto-match images by product name slug',

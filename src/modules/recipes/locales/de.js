@@ -11,6 +11,8 @@
     export const templates = {
       'h2524401dbaa32c2b': html`Exportieren Sie Ihre Rezepte aus der Recipe-Keeper-App (<em>Menü → Exportieren → Recipe-Keeper-Datei</em>) und wählen Sie dann unten die exportierte <code>.zip</code>-Datei aus. Rezeptfotos werden, falls verfügbar, lokal gespeichert.`,
 'h3518038de78dd829': html`Tipp: Verwenden Sie <code>#Abschnittsname</code>, um eine Abschnittsüberschrift hinzuzufügen. Oder fügen Sie mehrere Zeilen gleichzeitig ein:`,
+'s0b382cb50ce7e39c': `Einheiten`,
+'sc3ac225273c8316b': `Allgemein`,
 's005053d82b712e0a': `Notizen`,
 's00763d910308e80e': `Als Hauptfoto festlegen`,
 's00ac24fb2856b614': `Rezepte`,

@@ -11,6 +11,8 @@
     export const templates = {
       'h2524401dbaa32c2b': html`Exportez vos recettes depuis l'application Recipe Keeper (<em>Menu → Exporter → Fichier Recipe Keeper</em>), puis sélectionnez le fichier<code>.zip</code>exporté ci-dessous. Les photos des recettes seront enregistrées localement si disponibles.`,
 'h3518038de78dd829': html`Astuce : Utilisez<code>#Nom de Section</code>pour ajouter un en-tête de section. Ou collez plusieurs lignes à la fois :`,
+'s0b382cb50ce7e39c': `Unités`,
+'sc3ac225273c8316b': `Général`,
 's005053d82b712e0a': `Notes`,
 's00763d910308e80e': `Définir comme photo principale`,
 's00ac24fb2856b614': `Recettes`,

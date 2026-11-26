@@ -21,7 +21,11 @@ All in `/config/.storage`:
 | `ksh_recipes.*` | Recipes, meal plans, global timers |
 | `ksh_shopping.*` | Lists, items, products, categories, loyalty cards, groups, supermarkets |
 
-Images are in `/config/www/images/recipe_manager/` (recipes) and `/config/www/images/shopping_list_manager/` (shopping). The Home Assistant backup includes them when it includes the `www` folder.
+Pictures are in `/config/www/images/ksh-family-hub/`, with a `recipes` and a `shopping` folder. The Home Assistant backup includes them when it includes the `www` folder.
+
+### Pictures from earlier versions
+
+The first time this version starts, it copies pictures from the older folders (`images/recipe_manager`, `images/shopping_list_manager` and `images/groceries`) into the new ones and updates the links to them. The old folders are left as they were, so Recipe Manager and Shopping List Manager keep working. If you have your own tool that copies pictures into `images/groceries`, point it at `images/ksh-family-hub/shopping` instead: pictures added to the old folder afterwards are not picked up.
 
 PINs are stored as salted hashes, never as the digits.
 

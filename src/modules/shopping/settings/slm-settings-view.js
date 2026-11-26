@@ -20,6 +20,8 @@ class SLMSettingsView extends LitElement {
     api: { type: Object },
     settings: { type: Object },
     isEmbedded: { type: Boolean },
+    // In the Family Hub: colours and style are in the hub's settings, the region in its menu, tiles per row in the list menu
+    hubMode: { type: Boolean },
     categories: { type: Array },
     lists: { type: Array },
     // 'classic' | 'fresh' | 'compact' (see Appearance settings)
@@ -71,8 +73,12 @@ class SLMSettingsView extends LitElement {
         id: 'personalise',
         title: t('Personalise'),
         rows: [
-          nav('appearance', '🎨', 'mdi:palette-outline', '--slm-cat-beverages', t('Appearance'), t('Style, colour mode, tiles, fonts')),
-          nav('data', '🌏', 'mdi:earth', '--slm-cat-dairy', t('Region & Catalog'), t('Country-specific products and pricing')),
+          ...(this.hubMode ? [
+            nav('appearance', '🖼️', 'mdi:image-text', '--slm-cat-beverages', t('Pictures & text'), t('Product pictures, fonts and recently used')),
+          ] : [
+            nav('appearance', '🎨', 'mdi:palette-outline', '--slm-cat-beverages', t('Appearance'), t('Style, colour mode, tiles, fonts')),
+            nav('data', '🌏', 'mdi:earth', '--slm-cat-dairy', t('Region & Catalog'), t('Country-specific products and pricing')),
+          ]),
           nav('categories', '📦', 'mdi:shape-outline', '--slm-cat-bakery', t('Manage Categories'), `${(this.categories || []).length} ${t('categories')}`),
           nav('supermarkets', '🏪', 'mdi:storefront-outline', '--slm-cat-snacks', t('Supermarkets'), t('The shops you use, with addresses')),
         ]
@@ -223,6 +229,7 @@ class SLMSettingsView extends LitElement {
           <ksh-slm-appearance-settings
             .settings=${this.settings}
             .isEmbedded=${this.isEmbedded}
+            .hubMode=${this.hubMode}
             .uiStyle=${this.uiStyle}
             @settings-changed=${(e) => this.dispatchEvent(e)}
             @back=${() => this.currentSection = 'main'}
@@ -258,8 +265,10 @@ class SLMSettingsView extends LitElement {
         `;
 
       case 'data':
+      case 'regions':      // opened from the hub's Region and language sheet
         return html`
           <ksh-slm-data-settings
+            .customOnly=${this.currentSection === 'regions'}
             .uiStyle=${this.uiStyle}
             .api=${this.api}
             @back=${() => this.currentSection = 'main'}

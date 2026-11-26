@@ -93,7 +93,8 @@ class RmSettingsView extends LitElement {
       <div class="settings-root">
         <div class="tab-bar">
           ${[
-            ['appearance', 'mdi:palette-outline',      msg('Appearance')],
+            // in the hub the colours are in the hub's settings, so what is left here is not about appearance
+            this.hubMode ? ['appearance', 'mdi:tune', msg('General')] : ['appearance', 'mdi:palette-outline', msg('Appearance')],
             ['advanced',   'mdi:tune-variant',         msg('Advanced')],
             ['sync',       'mdi:cloud-sync-outline',   msg('Sync')],
             ['help',       'mdi:help-circle-outline',  msg('Help')],
@@ -231,8 +232,9 @@ class RmSettingsView extends LitElement {
 
       <!-- ── Language & Units ── -->
       <div class="section">
-        <div class="section-label">${msg('Language & Units')}</div>
+        <div class="section-label">${this.hubMode ? msg('Units') : msg('Language & Units')}</div>
 
+        ${this.hubMode ? '' : html`
         <div class="setting-row">
           ${this._tile('mdi:translate', 2)}
           <span class="setting-name">${msg('Language')}</span>
@@ -242,6 +244,7 @@ class RmSettingsView extends LitElement {
             `)}
           </select>
         </div>
+        `}
 
         <div class="setting-row">
           ${this._tile('mdi:scale-balance', 3)}
@@ -259,6 +262,7 @@ class RmSettingsView extends LitElement {
       <div class="section">
         <div class="section-label">${msg('Recipe Grid')}</div>
 
+        ${this.hubMode ? '' : html`
         <div class="setting-row">
           ${this._tile('mdi:view-grid-outline', 2)}
           <span class="setting-name">${msg('Recipe columns')}</span>
@@ -280,6 +284,7 @@ class RmSettingsView extends LitElement {
             `)}
           </div>
         </div>
+        `}
 
         <div class="setting-row">
           ${this._tile('mdi:heart-outline', 6)}

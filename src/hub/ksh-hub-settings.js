@@ -174,9 +174,13 @@ class KshHubSettings extends LitElement {
           <div><span>Card</span><b>${this.cardVersion ?? '—'}</b></div>
           ${Object.entries(this.info?.imported || {}).map(([part, files]) => html`
             <div><span>Imported ${part === 'recipes' ? 'recipes' : 'shopping'} data</span><b>${files.length ? `${files.length} file${files.length === 1 ? '' : 's'}` : 'none found'}</b></div>`)}
+          ${Object.entries(this.info?.pictures || {}).map(([part, done]) => html`
+            <div><span>${part === 'recipes' ? 'Recipe' : 'Shopping'} pictures copied</span><b>${done.copied}</b></div>`)}
         </section>
         <p class="note">On first start the hub copies your existing Recipe Manager and Shopping List Manager data.
           The originals are left untouched, so the standalone integrations keep working side by side.</p>
+        <p class="note">Pictures are kept in <b>config/www/images/ksh-family-hub/</b>, in a <b>shopping</b> and a <b>recipes</b> folder.
+          Pictures from the older folders are copied there once. Put new pictures of your own in the new folder.</p>
       </div>`;
   }
 

@@ -9,6 +9,8 @@
     /* eslint-disable @typescript-eslint/no-explicit-any */
 
     export const templates = {
+'sc3ac225273c8316b': `Algemeen`,
+'s0b382cb50ce7e39c': `Eenheden`,
       'h2524401dbaa32c2b': html`Exporteer je recepten uit de Recipe Keeper-app (<em>Menu → Exporteren → Recipe Keeper-bestand</em>) en selecteer hieronder het geëxporteerde<code>.zip</code>-bestand. Receptfoto's worden lokaal opgeslagen indien beschikbaar.`,
 'h3518038de78dd829': html`Tip: Gebruik<code>#Sectienaam</code>om een sectiekop toe te voegen. Of plak meerdere regels tegelijk:`,
 's005053d82b712e0a': `Notities`,

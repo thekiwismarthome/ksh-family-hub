@@ -1,5 +1,7 @@
 """Constants for the KSH Family Hub recipes module."""
 
+from ..picture_folders import RECIPES_FOLDER, RECIPES_URL
+
 DOMAIN = "ksh_recipes"  # namespace for storage keys, events and websocket commands
 HUB_DOMAIN = "ksh_family_hub"  # the config-entry domain
 LEGACY_DOMAIN = "recipe_manager"  # standalone Recipe Manager (storage is imported once)
@@ -23,8 +25,8 @@ EVENT_GLOBAL_TIMER_DELETED = f"{DOMAIN}_global_timer_deleted"
 # Image config
 IMAGE_SIZE = 400
 IMAGE_QUALITY = 85
-IMAGES_LOCAL_DIR = "www/images/recipe_manager"
-LEGACY_IMAGES_LOCAL_DIR = "www/recipe_manager/images"
+IMAGES_LOCAL_DIR = RECIPES_FOLDER
+LOCAL_IMAGE_URL_PREFIX = RECIPES_URL
 
 # Meal types
 MEAL_TYPES = ["breakfast", "lunch", "dinner", "snack", "dessert"]

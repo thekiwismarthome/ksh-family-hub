@@ -23,7 +23,7 @@ Lists can be shared with the **household** or kept private.
 
 ## Region and catalogue
 
-Menu (☰) → **Change Region/Language** picks the country whose product catalogue is used. Products you created yourself are kept when you switch.
+Menu (☰) → **Change Region/Language** picks the country whose product catalogue is used. Products you created yourself are kept when you switch. **Custom regions…** on the same sheet makes a region of your own.
 
 ## Supermarkets and loyalty cards
 

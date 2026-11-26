@@ -1299,6 +1299,12 @@
   <source>Clear search</source>
         <target>Suche löschen</target>
 </trans-unit>
+<trans-unit id="sc3ac225273c8316b">
+  <source>General</source>
+<target>Allgemein</target></trans-unit>
+<trans-unit id="s0b382cb50ce7e39c">
+  <source>Units</source>
+<target>Einheiten</target></trans-unit>
 </body>
 </file>
 </xliff>
